@@ -11,7 +11,7 @@
 1. **`copilot`** → иконка **CP** в menubar.
 2. **CP → Начать интервью** — hotkey `⌘↩` активен.
 3. Реплики: STT, **CP → Добавить реплику…**, или `data/transcript.md`.
-4. **`⌘↩`** — ответ **в терминале** (оформленный блок) + запись в `data/last-answer.md`.
+4. **`⌘↩`** — в терминале **только вопрос и ответ** (ответ **по чанкам**, `TERMINAL_ANSWER_STREAM=1`) + `data/last-answer.md`.
 5. **CP → Закончить интервью** / **Выход**.
 
 **Agents в Cursor:** New Agent создаёт только пользователь. Sidecar **не** переключает фокус на Cursor. Опционально: `CURSOR_AGENT_CHAT_ID` + `CURSOR_AGENT_MIRROR=1` (эксперимент, push без смены окна).
@@ -29,6 +29,7 @@
 Полезные флаги:
 
 - `CURSOR_OPEN_ANSWER_FILE=1` — ещё открывать `last-answer.md` в Cursor (по умолчанию **выкл**).
+- `TERMINAL_ANSWER_STREAM=1` — печатать ответ в терминал по мере генерации (по умолчанию **вкл**).
 - `CURSOR_AGENT_MIRROR=0` — не дергать `cursor agent` при ответе (рекомендуется).
 
 ## Формат ответов на вопросы интервьюера
@@ -39,7 +40,7 @@
 
 ## Транскрипт
 
-- `[Интервьюер]:` — звук созвона (BlackHole, `AUDIO_INPUT_INTERVIEWER`)
+- `[Интервьюер]:` — звук созвона (BlackHole, `AUDIO_INPUT_INTERVIEWER`); при **Начать интервью** + **Начать прослушивание** — сегменты в терминал (`TERMINAL_SHOW_INTERVIEWER=1`)
 - `[Я]:` — микрофон (`AUDIO_INPUT_SELF`)
 
 На «ответь на последний вопрос» — последний `[Интервьюер]:` в `data/transcript.md`. Готовый ответ sidecar: терминал + `data/last-answer.md`.

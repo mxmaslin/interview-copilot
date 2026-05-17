@@ -4,9 +4,13 @@ import json
 import os
 import subprocess
 import threading
+from collections.abc import Callable
 from pathlib import Path
 
+from .cursor_stream import parse_answer_stream_line
+
 from .config import AGENT_STATE_PATH, CURSOR_AGENT_DIR, DATA_DIR, REPO_ROOT, cursor_api_key
+from .interview_quiet import log
 from .cursor_ide_chat import (
     BIND_HELP,
     CursorIdeChatError,
@@ -83,7 +87,7 @@ def _log_sdk_stderr(stderr: str) -> None:
     if not err:
         return
     for ln in err.splitlines():
-        print(f"[cursor-agent] {ln}", flush=True)
+        log("[cursor-agent]", ln)
 
 
 def _run_node(command: str, *extra: str, timeout: int = _TIMEOUT_START) -> dict:
@@ -145,7 +149,7 @@ def _run_node(command: str, *extra: str, timeout: int = _TIMEOUT_START) -> dict:
 def reset_agent_state() -> None:
     if AGENT_STATE_PATH.exists():
         AGENT_STATE_PATH.unlink(missing_ok=True)
-        print("[copilot] привязка chatId сброшена", flush=True)
+        log("[copilot] привязка chatId сброшена")
 
 
 def bind_user_chat(chat_id: str) -> dict:
@@ -181,6 +185,78 @@ def answer_last_question() -> dict:
     return _run_node("answer", timeout=_TIMEOUT_ANSWER)
 
 
+def answer_last_question_stream(on_delta: Callable[[str], None]) -> dict:
+    """Cursor SDK answer с NDJSON delta на stdout (`agent.mjs answer`)."""
+    global _active_proc
+    key = cursor_api_key()
+    if not key:
+        raise CursorBridgeError(
+            "CURSOR_API_KEY не задан. Скопируй .env.example → .env и укажи ключ."
+        )
+    agent_script = CURSOR_AGENT_DIR / "agent.mjs"
+    if not agent_script.exists():
+        raise CursorBridgeError(f"Не найден {agent_script}")
+
+    env = {**os.environ, "CURSOR_API_KEY": key}
+    cmd = ["node", str(agent_script), "answer", f"--cwd={REPO_ROOT}"]
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(CURSOR_AGENT_DIR),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+    )
+    with _proc_lock:
+        _active_proc = proc
+
+    stderr_chunks: list[str] = []
+    final: dict | None = None
+
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            kind, obj = parse_answer_stream_line(line)
+            if kind == "delta" and obj:
+                text = obj.get("text") or ""
+                if text:
+                    on_delta(text)
+            elif kind == "done" and obj:
+                final = obj
+
+        assert proc.stderr is not None
+        stderr_chunks.append(proc.stderr.read())
+        proc.wait(timeout=_TIMEOUT_ANSWER)
+    except subprocess.TimeoutExpired:
+        cancel_active_sdk()
+        raise CursorBridgeError(
+            f"Таймаут Cursor SDK ({_TIMEOUT_ANSWER} с). Закрой зависший Agent в Cursor или жми «Закончить интервью»."
+        ) from None
+    finally:
+        with _proc_lock:
+            if _active_proc is proc:
+                _active_proc = None
+
+    stderr = "".join(stderr_chunks).strip()
+    if proc.returncode != 0:
+        _log_sdk_stderr(stderr)
+        msg = _extract_sdk_error(stderr, "") or _truncate(
+            stderr or f"exit {proc.returncode}"
+        )
+        raise CursorBridgeError(msg)
+
+    if final is None:
+        return {"status": "finished", "text": ""}
+
+    return {
+        "status": final.get("status", "finished"),
+        "text": (final.get("text") or "").strip(),
+        "runId": final.get("runId"),
+    }
+
+
 def agent_session_ready() -> bool:
     return chat_is_bound()
 
@@ -200,7 +276,7 @@ def push_turn_to_agent(
         raise CursorBridgeError("CLI `cursor` не найден в PATH")
     try:
         push_turn_ide(question, answer, provider=provider, model=model)
-        print(f"[copilot] push в привязанный чат ({sid[:20]}…)", flush=True)
+        log("[copilot] push в привязанный чат", f"({sid[:20]}…)")
         return {"status": "finished", "mirrored": True, "chatId": sid}
     except CursorIdeChatError as e:
         raise CursorBridgeError(str(e)) from e

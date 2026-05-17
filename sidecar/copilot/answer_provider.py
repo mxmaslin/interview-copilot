@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from .config import (
@@ -9,16 +10,20 @@ from .config import (
     answer_openai_model,
     answer_provider,
     cursor_agent_mirror,
+    cursor_model,
     cursor_open_answer_file,
     deepseek_answer_model,
     deepseek_api_base,
     deepseek_api_key,
     openai_api_key,
+    terminal_answer_stream,
 )
 from .answer_delivery import reveal_in_cursor, write_last_answer
-from .terminal_display import print_interview_answer
+from .interview_quiet import log
+from .terminal_display import InterviewAnswerStream, print_interview_answer
 from .cursor_bridge import (
     CursorBridgeError,
+    answer_last_question,
     load_bound_session,
     push_turn_to_agent,
 )
@@ -48,34 +53,27 @@ def _build_user_message() -> str:
     return user
 
 
-def _publish_answer(
+def _finalize_answer(
     question: str,
     answer: str,
     *,
     provider: str,
     model: str = "",
 ) -> dict[str, Any]:
-    """
-    1) data/last-answer.md (архив).
-    2) При CURSOR_AGENT_MIRROR=1 — ответ в панели Agents → _copilot (приоритет над файлом).
-    """
+    """Файл, mirror, открытие в Cursor — без печати в терминал."""
     meta: dict[str, Any] = {
         "cursor_delivery": False,
         "cursor_agent_pushed": False,
     }
-    print_interview_answer(
-        question, answer, provider=provider, model=model
-    )
-    meta["terminal"] = True
 
     path = write_last_answer(question, answer, provider=provider, model=model)
     meta["answer_path"] = str(path)
-    print(f"[copilot] также: {path}", flush=True)
+    log("[copilot] также:", path)
 
     if cursor_agent_mirror():
         if not chat_is_bound():
             meta["cursor_agent_error"] = "чат не привязан (New Agent в Cursor вручную)"
-            print(f"[copilot] MIRROR: {BIND_HELP}", flush=True)
+            log("[copilot] MIRROR:", BIND_HELP)
         else:
             try:
                 state = load_bound_session() or {}
@@ -83,16 +81,55 @@ def _publish_answer(
                 meta["chatId"] = state.get("chatId", meta["agentId"])
                 push_turn_to_agent(question, answer, provider=provider, model=model)
                 meta["cursor_agent_pushed"] = True
-                print("[copilot] push в привязанный чат (без переключения окна)", flush=True)
+                log("[copilot] push в привязанный чат")
             except CursorBridgeError as e:
                 meta["cursor_agent_error"] = str(e)
-                print(f"[copilot] WARN: {e}", flush=True)
+                log("[copilot] WARN:", e)
 
     if cursor_open_answer_file():
         reveal_in_cursor(path)
         meta["cursor_delivery"] = True
-        print("[copilot] открыт last-answer.md в Cursor (CURSOR_OPEN_ANSWER_FILE=1)", flush=True)
+        log("[copilot] открыт last-answer.md в Cursor")
 
+    return meta
+
+
+def _publish_answer(
+    question: str,
+    answer: str,
+    *,
+    provider: str,
+    model: str = "",
+) -> dict[str, Any]:
+    print_interview_answer(question, answer, provider=provider, model=model)
+    meta = _finalize_answer(question, answer, provider=provider, model=model)
+    meta["terminal"] = True
+    return meta
+
+
+def _publish_with_stream(
+    question: str,
+    *,
+    provider: str,
+    model: str,
+    collect: Callable[[Callable[[str], None]], str],
+) -> dict[str, Any]:
+    """collect(on_delta) -> full text; печать в терминал по чанкам."""
+    stream = InterviewAnswerStream(question, provider=provider, model=model)
+    stream.begin()
+    parts: list[str] = []
+
+    def on_delta(delta: str) -> None:
+        if not delta:
+            return
+        parts.append(delta)
+        stream.write_chunk(delta)
+
+    text = collect(on_delta).strip() or "".join(parts).strip()
+    stream.end()
+    meta = _finalize_answer(question, text, provider=provider, model=model)
+    meta["terminal"] = True
+    meta["text"] = text
     return meta
 
 
@@ -125,6 +162,42 @@ def _chat_complete(
     return {"status": "finished", "text": text, "provider": provider, "model": model}
 
 
+def _chat_complete_stream(
+    *,
+    provider: str,
+    api_key: str,
+    model: str,
+    base_url: str | None,
+    on_delta: Callable[[str], None],
+) -> str:
+    try:
+        from openai import OpenAI
+    except ImportError as e:
+        raise AnswerProviderError("pip install -e 'sidecar/[openai]'") from e
+
+    kwargs: dict[str, Any] = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    client = OpenAI(**kwargs)
+    stream = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": INTERVIEW_SYSTEM},
+            {"role": "user", "content": _build_user_message()},
+        ],
+        max_tokens=answer_max_tokens(),
+        temperature=0.25,
+        stream=True,
+    )
+    parts: list[str] = []
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content or ""
+        if delta:
+            parts.append(delta)
+            on_delta(delta)
+    return "".join(parts).strip()
+
+
 def answer_via_openai() -> dict[str, Any]:
     key = openai_api_key()
     if not key:
@@ -133,11 +206,29 @@ def answer_via_openai() -> dict[str, Any]:
         )
     question = last_interviewer_line() or ""
     model = answer_openai_model()
-    result = _chat_complete(
-        provider="openai",
-        api_key=key,
-        model=model,
-    )
+
+    if terminal_answer_stream():
+
+        def collect(on_delta: Callable[[str], None]) -> str:
+            return _chat_complete_stream(
+                provider="openai",
+                api_key=key,
+                model=model,
+                base_url=None,
+                on_delta=on_delta,
+            )
+
+        meta = _publish_with_stream(
+            question, provider="openai", model=model, collect=collect
+        )
+        return {
+            "status": "finished",
+            "provider": "openai",
+            "model": model,
+            **meta,
+        }
+
+    result = _chat_complete(provider="openai", api_key=key, model=model)
     result.update(_publish_answer(question, result["text"], provider="openai", model=model))
     return result
 
@@ -150,13 +241,54 @@ def answer_via_deepseek() -> dict[str, Any]:
         )
     question = last_interviewer_line() or ""
     model = deepseek_answer_model()
+
+    if terminal_answer_stream():
+
+        def collect(on_delta: Callable[[str], None]) -> str:
+            return _chat_complete_stream(
+                provider="deepseek",
+                api_key=key,
+                model=model,
+                base_url=deepseek_api_base(),
+                on_delta=on_delta,
+            )
+
+        meta = _publish_with_stream(
+            question, provider="deepseek", model=model, collect=collect
+        )
+        return {
+            "status": "finished",
+            "provider": "deepseek",
+            "model": model,
+            **meta,
+        }
+
     result = _chat_complete(
         provider="deepseek",
         api_key=key,
         model=model,
         base_url=deepseek_api_base(),
     )
-    result.update(_publish_answer(question, result["text"], provider="deepseek", model=model))
+    result.update(
+        _publish_answer(question, result["text"], provider="deepseek", model=model)
+    )
+    return result
+
+
+def answer_via_cursor() -> dict[str, Any]:
+    question = last_interviewer_line() or ""
+    model = cursor_model()
+
+    sdk = answer_last_question()
+    text = (sdk.get("text") or "").strip()
+    result = {
+        "status": sdk.get("status", "finished"),
+        "text": text,
+        "provider": "cursor",
+        "model": model,
+        "runId": sdk.get("runId"),
+    }
+    result.update(_publish_answer(question, text, provider="cursor", model=model))
     return result
 
 
@@ -171,6 +303,5 @@ def dispatch_answer() -> dict[str, Any]:
             f"Неизвестный ANSWER_PROVIDER={provider!r}. "
             f"Допустимо: cursor | openai | deepseek"
         )
-    from .cursor_bridge import answer_last_question
+    return answer_via_cursor()
 
-    return answer_last_question()

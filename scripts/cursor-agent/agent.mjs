@@ -200,10 +200,26 @@ async function cmdAnswer() {
   );
 
   const agent = await resumeAgent(state);
+  const parts = [];
   try {
-    const run = await agent.send(prompt);
+    const run = await agent.send(prompt, {
+      onDelta: ({ update }) => {
+        if (update?.type === "text-delta" && update.text) {
+          parts.push(update.text);
+          console.log(JSON.stringify({ event: "delta", text: update.text }));
+        }
+      },
+    });
     const result = await run.wait();
-    printResult(result);
+    const text = extractAssistantText(result) || parts.join("");
+    console.log(
+      JSON.stringify({
+        event: "done",
+        status: result.status,
+        runId: result.id,
+        text,
+      }),
+    );
     process.exit(result.status === "finished" ? 0 : 2);
   } catch (err) {
     handleError(err);
