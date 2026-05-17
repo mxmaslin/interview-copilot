@@ -70,9 +70,22 @@ def whisper_api_model() -> str:
     return _env("WHISPER_MODEL", "whisper-1")
 
 
+def stt_latency_preset() -> str:
+    """fast | balanced | quality — пресет задержки STT (см. docs/audio-setup.md)."""
+    return _env("STT_LATENCY", "fast").lower()
+
+
 def whisper_local_size() -> str:
     """tiny | base | small | medium | large-v3 …"""
-    return _env("WHISPER_MODEL_SIZE", "small")
+    explicit = _env("WHISPER_MODEL_SIZE")
+    if explicit:
+        return explicit
+    preset = stt_latency_preset()
+    if preset == "quality":
+        return "small"
+    if preset == "balanced":
+        return "base"
+    return "base"  # fast: base — компромисс скорость/качество на Apple Silicon
 
 
 def whisper_compute_type() -> str:
@@ -84,6 +97,27 @@ def whisper_device() -> str:
     return _env("WHISPER_DEVICE", "cpu")
 
 
+def whisper_cpu_threads() -> int:
+    try:
+        return int(_env("WHISPER_CPU_THREADS", "0"))
+    except ValueError:
+        return 0
+
+
+def whisper_beam_size() -> int:
+    try:
+        return int(_env("WHISPER_BEAM_SIZE", "1"))
+    except ValueError:
+        return 1
+
+
+def whisper_vad_filter() -> bool:
+    explicit = _env("WHISPER_VAD_FILTER", "")
+    if explicit:
+        return explicit.lower() not in ("0", "false", "no")
+    return stt_latency_preset() == "quality"
+
+
 def sample_rate() -> int:
     try:
         return int(_env("AUDIO_SAMPLE_RATE", "16000"))
@@ -92,17 +126,52 @@ def sample_rate() -> int:
 
 
 def silence_seconds() -> float:
-    try:
-        return float(_env("AUDIO_SILENCE_SEC", "1.2"))
-    except ValueError:
-        return 1.2
+    explicit = _env("AUDIO_SILENCE_SEC")
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    preset = stt_latency_preset()
+    if preset == "quality":
+        return 1.0
+    if preset == "balanced":
+        return 0.55
+    return 0.42  # fast: короче пауза → раньше отдаём сегмент в Whisper
 
 
 def min_speech_seconds() -> float:
     try:
-        return float(_env("AUDIO_MIN_SPEECH_SEC", "0.4"))
+        return float(_env("AUDIO_MIN_SPEECH_SEC", "0.25"))
     except ValueError:
-        return 0.4
+        return 0.25
+
+
+def audio_block_ms() -> int:
+    try:
+        return max(20, int(_env("AUDIO_BLOCK_MS", "50")))
+    except ValueError:
+        return 50
+
+
+def max_segment_seconds() -> float:
+    """Макс. длина непрерывной речи без паузы — принудительный STT (0 = выкл)."""
+    explicit = _env("AUDIO_MAX_SEGMENT_SEC")
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    preset = stt_latency_preset()
+    if preset == "quality":
+        return 0.0
+    if preset == "balanced":
+        return 5.0
+    return 3.5  # fast: не ждать длинной паузы в конце монолога
+
+
+def audio_prefer_16k() -> bool:
+    return _env("AUDIO_PREFER_16K", "1").lower() not in ("0", "false", "no")
 
 
 def answer_provider() -> str:
@@ -182,3 +251,13 @@ def cursor_agent_fresh_each_run() -> bool:
 def cursor_open_answer_file() -> bool:
     """Открывать data/last-answer.md в редакторе (по умолчанию выкл — ответ в терминале)."""
     return _env("CURSOR_OPEN_ANSWER_FILE", "0").lower() not in ("0", "false", "no")
+
+
+def terminal_show_interviewer_stt() -> bool:
+    """Печатать реплики интервьюера в терминал по мере STT (во время интервью)."""
+    return _env("TERMINAL_SHOW_INTERVIEWER", "1").lower() not in ("0", "false", "no")
+
+
+def terminal_answer_stream() -> bool:
+    """Печатать ответ ⌘↩ в терминал по чанкам (OpenAI/DeepSeek stream)."""
+    return _env("TERMINAL_ANSWER_STREAM", "1").lower() not in ("0", "false", "no")
