@@ -1,0 +1,43 @@
+[project]
+name = "copilot-sidecar"
+version = "0.1.0"
+description = "macOS menubar sidecar for Copilot"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "rumps>=0.4.0",
+  "pynput>=1.7.7",
+  "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+audio = [
+  "sounddevice>=0.4.6",
+  "numpy>=1.26.0",
+  "faster-whisper>=1.1.0",
+]
+openai = [
+  "openai>=1.40.0",
+]
+# openai SDK + DeepSeek/OpenAI Chat API для ANSWER_PROVIDER
+llm = [
+  "openai>=1.40.0",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[project.scripts]
+copilot = "copilot.app:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["copilot*"]

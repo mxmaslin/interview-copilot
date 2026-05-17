@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Локальный launcher: всегда sidecar из .venv этого репозитория.
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$ROOT/.venv/bin/copilot" "$@"
