@@ -1,6 +1,6 @@
 # Copilot sidecar
 
-macOS menubar: STT, `data/transcript.md`, hotkey `⌘↩`, ответ в **терминале по чанкам** (`TERMINAL_ANSWER_STREAM`, `terminal_display.py`).
+macOS menubar: STT (`STT_LATENCY=fast`, Whisper `small`), `data/transcript.md`, hotkey `⌘↩`. Подряд `[Интервьюер]` без `[Я]` между ними = один вопрос. Ответ в **терминале по чанкам** (`TERMINAL_ANSWER_STREAM`).
 
 Опционально: привязка chatId Agents (`cursor_ide_chat.py`), SDK (`scripts/cursor-agent`) для `ANSWER_PROVIDER=cursor`.
 

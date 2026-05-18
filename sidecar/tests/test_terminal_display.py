@@ -21,3 +21,13 @@ def test_print_writes_box(monkeypatch) -> None:
     assert "Вопрос" in out
     assert "GIL" in out
     assert "mutex" in out
+
+
+def test_interviewer_transcript(monkeypatch) -> None:
+    buf = StringIO()
+    monkeypatch.setattr(td.sys, "stdout", buf)
+    monkeypatch.setattr(td, "_use_color", lambda: False)
+    td.print_interviewer_transcript("Что такое asyncio?")
+    out = buf.getvalue()
+    assert "Интервьюер" in out
+    assert "asyncio" in out

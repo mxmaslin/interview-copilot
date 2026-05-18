@@ -49,25 +49,64 @@ pip install -e "./sidecar[audio]"
 
 ```bash
 STT_PROVIDER=local
-WHISPER_MODEL_SIZE=small
+STT_LATENCY=fast          # fast | balanced | quality
 WHISPER_COMPUTE_TYPE=int8
 WHISPER_DEVICE=cpu
 AUDIO_INPUT_INTERVIEWER=BlackHole
 AUDIO_INPUT_SELF=Brio
-# AUDIO_SAMPLE_RATE — опционально; sidecar сам берёт native rate устройства (обычно 48000)
+AUDIO_PREFER_16K=1
 ```
 
-Первый запуск скачает модель **small** (~500 MB) — один раз, 1–3 минуты. Дальше сегменты распознаются на машине, **без API-ключей**.
+Первый запуск скачает модель **small** (пресет `fast`) — один раз (~500 MB). Дальше сегменты на машине, **без API-ключей**.
+
+Сообщение `unauthenticated requests to the HF Hub` — от библиотеки Hugging Face при скачивании модели; на работу не влияет. Sidecar приглушает его в терминале. По желанию: `HF_TOKEN=hf_…` в `.env` ([токен на huggingface.co](https://huggingface.co/settings/tokens)).
+
+### Задержка STT и вывод в терминал
+
+Критичный путь: **пауза в речи → сегмент → Whisper → `print_interviewer_transcript`**.
+
+| Переменная | `fast` (default) | Назначение |
+|------------|------------------|------------|
+| `STT_LATENCY` | `fast` | Пресет; `quality` — старые длинные паузы + VAD |
+| `AUDIO_SILENCE_SEC` | ~0.42 | Сколько тишины ждать перед STT |
+| `AUDIO_MAX_SEGMENT_SEC` | ~3.5 | Срез длинного монолога без паузы |
+| `AUDIO_BLOCK_MS` | 50 | Размер блока PortAudio (было 100 ms) |
+| `WHISPER_MODEL_SIZE` | `small` | Явно переопределяет пресет |
+| `WHISPER_BEAM_SIZE` | 1 | Меньше beam → быстрее |
+| `WHISPER_VAD_FILTER` | 0 | VAD в Whisper дублирует сегментацию listener |
+
+STT выполняется **в фоновом потоке** — запись с BlackHole не блокируется на время Whisper.
+
+### Пайплайн (интервьюер → DeepSeek)
+
+1. BlackHole / вход → сегмент по паузе (~0.42 с) или срез ~3.5 с речи.
+2. **faster-whisper** (async) → `transcript.md` + терминал («Интервьюер»).
+3. **⌘↩** → последний блок подряд `[Интервьюер]` (один вопрос) → DeepSeek **stream** → терминал.
+
+При `ANSWER_PROVIDER=deepseek` STT **не останавливается** на время ответа (`ANSWER_PAUSE_AUDIO=auto`).
+
+### Пределы задержки (честно)
+
+| Этап | Типично | Узкое место |
+|------|---------|------------|
+| Пауза до сегмента | ~0.4 с | Физика речи; меньше — обрезка слов |
+| Whisper `small` int8 | 1–3 с / сегмент | CPU; `base`/`tiny` быстрее, хуже RU |
+| Сеть DeepSeek TTFT | 0.3–1.5 с | API; `deepseek-chat`, не `reasoner` |
+| Генерация ответа | 2–8 с | `ANSWER_MAX_TOKENS`, длина ответа |
+
+Дальше без смены модели/железа выигрыш — единицы процентов. Для собеса: BlackHole на **интервьюера**, `STT_LATENCY=fast`, `DEEPSEEK_MODEL=deepseek-chat`.
+
+**Совет:** **CP → Начать интервью** сразу греет модель; **Начать прослушивание** — включает каналы.
+
+Если качество RU просело: `STT_LATENCY=balanced` или `WHISPER_MODEL_SIZE=small`.
 
 | `WHISPER_MODEL_SIZE` | Когда |
 |----------------------|--------|
-| `small` | баланс скорость/качество (рекомендуется) |
-| `base` | ещё быстрее, чуть хуже RU |
-| `medium` | если путает термины, Air может греться |
+| `small` | fast-пресет (рекомендуется для RU) |
+| `base` / `tiny` | быстрее, заметно хуже на терминах |
+| `medium` | если `small` путает слова (тяжелее для Air) |
 
 Облачный вариант (если нужен): `STT_PROVIDER=openai`, `OPENAI_API_KEY=…`, `pip install -e ".[audio,openai]"`.
-
-В menubar **CP → Начать прослушивание (STT)** — при старте модель подгружается в фоне.
 
 Проверка устройств:
 

@@ -3,12 +3,20 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+
 import numpy as np
 
 from .audio_devices import resolve_input_device
 from .audio_macos import open_input_stream_locked, probe_input_stream
-from .config import min_speech_seconds, silence_seconds
+from .config import (
+    audio_block_ms,
+    max_segment_seconds,
+    min_speech_seconds,
+    silence_seconds,
+)
+from .interview_quiet import log
 from .stt import STTError, transcribe_pcm16_mono
+from .stt_worker import transcribe_async
 from .transcript import append_line
 
 logger = logging.getLogger(__name__)
@@ -70,14 +78,17 @@ class AudioListener:
 
     def _run(self, device_index: int | None, sr: int) -> None:
         import sounddevice as sd
-        block = int(sr * 0.1)  # 100 ms
+
+        block = max(1, int(sr * audio_block_ms() / 1000.0))
+        block_sec = block / sr
         silence_limit = silence_seconds()
         min_speech = min_speech_seconds()
+        max_seg = max_segment_seconds()
+        rms_threshold = 0.012
 
         buf: list[np.ndarray] = []
         silent_blocks = 0
         speech_blocks = 0
-        rms_threshold = 0.012
 
         def callback(indata, frames, time_info, status) -> None:  # noqa: ANN001
             nonlocal silent_blocks, speech_blocks
@@ -90,12 +101,15 @@ class AudioListener:
                 buf.append(pcm.copy())
                 speech_blocks += 1
                 silent_blocks = 0
+                if max_seg > 0 and speech_blocks * block_sec >= max_seg:
+                    self._enqueue_flush(buf, speech_blocks * block_sec, sr)
+                    buf.clear()
+                    silent_blocks = 0
+                    speech_blocks = 0
             elif buf:
-                buf.append(pcm.copy())
                 silent_blocks += 1
-                block_sec = frames / sr
                 if silent_blocks * block_sec >= silence_limit:
-                    self._flush(buf, speech_blocks * block_sec, sr)
+                    self._enqueue_flush(buf, speech_blocks * block_sec, sr)
                     buf.clear()
                     silent_blocks = 0
                     speech_blocks = 0
@@ -117,7 +131,7 @@ class AudioListener:
             self._stream = open_input_stream_locked(_open)
             try:
                 while not self._stop.is_set():
-                    sd.sleep(100)
+                    sd.sleep(50)
             finally:
                 if self._stream is not None:
                     try:
@@ -127,7 +141,7 @@ class AudioListener:
                         pass
                     self._stream = None
             if buf:
-                self._flush(buf, speech_blocks * (block / sr), sr)
+                self._enqueue_flush(buf, speech_blocks * block_sec, sr)
         except Exception as e:
             logger.exception("Audio listener failed")
             msg = str(e)
@@ -138,16 +152,25 @@ class AudioListener:
                 )
             raise RuntimeError(msg) from e
 
-    def _flush(self, chunks: list[np.ndarray], speech_sec: float, sr: int) -> None:
-        if speech_sec < min_speech_seconds():
+    def _enqueue_flush(
+        self, chunks: list[np.ndarray], speech_sec: float, sr: int
+    ) -> None:
+        if speech_sec < min_speech_seconds() or not chunks:
             return
         pcm = np.concatenate(chunks)
-        try:
-            text = transcribe_pcm16_mono(pcm, sr)
-        except STTError as e:
-            logger.warning("STT failed: %s", e)
-            return
-        if not text or len(text) < 2:
-            return
-        logger.info("Transcribed: %s", text[:80])
-        self._on_transcript(text)
+        on_done = self._on_transcript
+
+        def deliver(text: str) -> None:
+            try:
+                on_done(text)
+            except Exception:
+                logger.exception("on_transcript failed")
+
+        if not transcribe_async(pcm, sr, deliver):
+            log("[copilot] STT очередь переполнена, сегмент пропущен")
+            try:
+                text = transcribe_pcm16_mono(pcm, sr)
+                if text:
+                    deliver(text)
+            except STTError as e:
+                logger.warning("STT failed: %s", e)

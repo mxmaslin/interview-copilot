@@ -66,6 +66,12 @@ def stt_provider() -> str:
     return _env("STT_PROVIDER", "local").lower()
 
 
+def hf_hub_token() -> str | None:
+    """Опционально: токен Hugging Face (скачивание Whisper, выше лимиты HF Hub)."""
+    key = _env("HF_TOKEN") or _env("HUGGING_FACE_HUB_TOKEN")
+    return key or None
+
+
 def whisper_api_model() -> str:
     return _env("WHISPER_MODEL", "whisper-1")
 
@@ -84,8 +90,8 @@ def whisper_local_size() -> str:
     if preset == "quality":
         return "small"
     if preset == "balanced":
-        return "base"
-    return "base"  # fast: base — компромисс скорость/качество на Apple Silicon
+        return "small"
+    return "small"  # fast: small — лучше RU, чем tiny/base; ~1–2 с медленнее base
 
 
 def whisper_compute_type() -> str:
@@ -206,7 +212,28 @@ def answer_context_chars() -> int:
 
 
 def answer_minimal_context() -> bool:
-    return _env("CURSOR_ANSWER_MINIMAL", "0").lower() in ("1", "true", "yes")
+    """Меньше токенов в промпте → быстрее первый токен DeepSeek/OpenAI."""
+    explicit = _env("ANSWER_MINIMAL_CONTEXT", "")
+    if explicit:
+        return explicit.lower() not in ("0", "false", "no")
+    legacy = _env("CURSOR_ANSWER_MINIMAL", "")
+    if legacy:
+        return legacy.lower() not in ("0", "false", "no")
+    return True
+
+
+def answer_pause_audio() -> bool:
+    """
+    Останавливать STT на время ⌘↩.
+    auto (default): только ANSWER_PROVIDER=cursor (локальный SDK).
+    always | never — принудительно.
+    """
+    mode = _env("ANSWER_PAUSE_AUDIO", "auto").lower()
+    if mode in ("0", "false", "no", "never"):
+        return False
+    if mode in ("1", "true", "yes", "always"):
+        return True
+    return answer_provider() == "cursor"
 
 
 def answer_openai_model() -> str:

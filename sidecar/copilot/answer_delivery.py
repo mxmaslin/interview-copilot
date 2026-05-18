@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from .config import DATA_DIR, REPO_ROOT
+from .interview_quiet import log
 
 LAST_ANSWER_PATH = DATA_DIR / "last-answer.md"
 
@@ -41,4 +42,4 @@ def reveal_in_cursor(path: Path | None = None) -> None:
     if not opened:
         subprocess.run(["open", "-a", "Cursor", str(target)], check=False)
     subprocess.run(["open", "-a", "Cursor", str(REPO_ROOT)], check=False)
-    print(f"[copilot] открываю в Cursor: {target.name}", flush=True)
+    log("[copilot] открываю в Cursor:", target.name)

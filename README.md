@@ -135,7 +135,7 @@ pip install -e "./sidecar[dev,openai]"
 pytest sidecar/tests -q
 ```
 
-Покрыто: config, transcript, audio, terminal_display, answer_delivery, cursor_bridge, cursor_ide_chat (25 тестов). **Нет** e2e: DeepSeek, микрофон, `cursor agent`.
+Покрыто: config, transcript, STT latency, streaming answers, audio, terminal_display, answer_delivery, cursor_bridge (45+ тестов). **Нет** e2e: DeepSeek, микрофон, `cursor agent`.
 
 ## Аудио (Zoom / Telemost / Meet)
 

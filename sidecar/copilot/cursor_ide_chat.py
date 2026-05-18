@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import AGENT_STATE_PATH, REPO_ROOT, cursor_agent_chat_id_env
+from .interview_quiet import log
 
 _TIMEOUT_TURN = 120
 
@@ -90,7 +91,7 @@ def bind_chat_id(chat_id: str, *, source: str = "menu") -> dict:
         "source": source,
     }
     save_agent_state(state)
-    print(f"[copilot] привязан чат Agents: {cid}", flush=True)
+    log("[copilot] привязан чат Agents:", cid)
     return {"status": "bound", "chatId": cid, "agentId": cid}
 
 
@@ -179,7 +180,7 @@ def open_ide_chat(
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        print(f"[copilot] фокус на привязанном чате: {sid[:24]}…", flush=True)
+        log("[copilot] фокус на привязанном чате:", f"{sid[:24]}…")
         return
     subprocess.run(cmd, cwd=str(root), check=False, timeout=_TIMEOUT_TURN)
 

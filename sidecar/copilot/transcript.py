@@ -23,17 +23,8 @@ def append_line(speaker: str, text: str) -> str:
     return line
 
 
-def last_interviewer_line() -> str | None:
-    if not TRANSCRIPT_PATH.exists():
-        return None
-    lines = [
-        ln
-        for ln in TRANSCRIPT_PATH.read_text(encoding="utf-8").splitlines()
-        if ln.startswith("[Интервьюер]:")
-    ]
-    if not lines:
-        return None
-    return lines[-1].replace("[Интервьюер]:", "", 1).strip()
+def _interviewer_text(line: str) -> str:
+    return line.replace("[Интервьюер]:", "", 1).strip()
 
 
 def dialogue_lines() -> list[str]:
@@ -45,6 +36,30 @@ def dialogue_lines() -> list[str]:
         if s.startswith("[Интервьюер]:") or s.startswith("[Я]:"):
             out.append(s)
     return out
+
+
+def last_interviewer_question() -> str | None:
+    """Подряд идущие [Интервьюер] с конца диалога (до [Я]) — один вопрос."""
+    dialogue = dialogue_lines()
+    if not dialogue:
+        return None
+    parts: list[str] = []
+    for line in reversed(dialogue):
+        if line.startswith("[Я]:"):
+            break
+        if line.startswith("[Интервьюер]:"):
+            text = _interviewer_text(line)
+            if text:
+                parts.append(text)
+    if not parts:
+        return None
+    parts.reverse()
+    return " ".join(parts)
+
+
+def last_interviewer_line() -> str | None:
+    """Алиас: см. last_interviewer_question."""
+    return last_interviewer_question()
 
 
 def compact_dialogue_context(max_chars: int) -> str:

@@ -12,6 +12,7 @@ import rumps
 from .config import (
     ANSWERS_PATH,
     DATA_DIR,
+    answer_pause_audio,
     answer_provider,
     audio_device_hint_interviewer,
     audio_device_hint_self,
@@ -19,6 +20,7 @@ from .config import (
     audio_listen_self,
     cursor_agent_fresh_each_run,
     cursor_api_key,
+    terminal_show_interviewer_stt,
 )
 from .answer_provider import AnswerProviderError, dispatch_answer
 from .terminal_display import print_interview_answer
@@ -35,6 +37,9 @@ from .cursor_ide_chat import (
     resolve_bound_chat_id,
     sync_env_chat_binding,
 )
+from .interview_quiet import interview_active, log, set_interview_active
+from .terminal_display import print_interviewer_transcript
+from .shutdown import shutdown_resources, suppress_resource_tracker_warning
 from .instance import SidecarLock
 from .audio_devices import AudioDeviceNotFoundError
 from .listener import AudioListener
@@ -108,11 +113,15 @@ class CopilotApp(rumps.App):
             reset_agent_state()
         cid = sync_env_chat_binding()
         if cid:
-            print(f"[copilot] chatId из .env: {cid}", flush=True)
+            log("[copilot] chatId из .env:", cid)
 
     def on_start(self, _: object) -> None:
+        from .stt import warmup_local_model
+
         self.session_active = True
+        set_interview_active(True)
         self._set_status("интервью")
+        warmup_local_model()
         self._start_hotkey()
         bound = resolve_bound_chat_id()
         hint = (
@@ -155,12 +164,9 @@ class CopilotApp(rumps.App):
         notify("Copilot", "Сброшено", "Привязка chatId удалена")
 
     def _on_transcript_interviewer(self, text: str) -> None:
-        line = append_line("interviewer", text)
-
-        def show() -> None:
-            notify("Транскрипт", "Интервьюер", line[:100])
-
-        run_on_main(show)
+        if interview_active() and terminal_show_interviewer_stt():
+            print_interviewer_transcript(text)
+        append_line("interviewer", text)
 
     def _on_transcript_self(self, text: str) -> None:
         line = append_line("self", text)
@@ -255,6 +261,7 @@ class CopilotApp(rumps.App):
             self._sdk_busy = False
         self._resume_listening_after_sdk = False
         self.session_active = False
+        set_interview_active(False)
         self._stop_all_audio()
         self._stop_hotkey()
         append_line("interviewer", "[система] sidecar: сессия остановлена")
@@ -297,7 +304,8 @@ class CopilotApp(rumps.App):
             rumps.alert("Нет вопроса", "Добавь реплику [Интервьюер] в транскрипт.")
             return
         self._sdk_busy = True
-        self._pause_audio_for_sdk()
+        if answer_pause_audio():
+            self._pause_audio_for_sdk()
         provider = answer_provider()
         label = {
             "openai": "OpenAI",
@@ -305,7 +313,7 @@ class CopilotApp(rumps.App):
             "cursor": "Cursor",
         }.get(provider, provider)
         self._set_status(f"генерация ({label})…")
-        print(f"[copilot] answer: provider={provider}", flush=True)
+        log("[copilot] answer: provider=", provider)
         threading.Thread(target=self._answer_worker, daemon=True).start()
 
     def _answer_worker(self) -> None:
@@ -327,10 +335,7 @@ class CopilotApp(rumps.App):
                 if result.get("cursor_agent_error") and not result.get(
                     "cursor_agent_pushed"
                 ):
-                    print(
-                        f"[copilot] mirror: {result['cursor_agent_error']}",
-                        flush=True,
-                    )
+                    log("[copilot] mirror:", result["cursor_agent_error"])
                 self._set_status("интервью" if self.session_active else "ожидание")
                 self._resume_audio_if_needed()
 
@@ -378,6 +383,7 @@ class CopilotApp(rumps.App):
         subprocess_open.run(["open", str(TRANSCRIPT_PATH)], check=False)
 
     def on_quit(self, _: object) -> None:
+        set_interview_active(False)
         try:
             cancel_active_sdk()
         except Exception:
@@ -385,6 +391,7 @@ class CopilotApp(rumps.App):
         self._sdk_busy = False
         self._stop_all_audio()
         self._stop_hotkey()
+        shutdown_resources()
         self._lock.release()
         rumps.quit_application()
 
@@ -412,9 +419,17 @@ class CopilotApp(rumps.App):
             )
 
     def _stop_hotkey(self) -> None:
-        if self._hotkey_listener is not None:
-            self._hotkey_listener.stop()
-            self._hotkey_listener = None
+        listener = self._hotkey_listener
+        self._hotkey_listener = None
+        if listener is None:
+            return
+        try:
+            listener.stop()
+            join = getattr(listener, "join", None)
+            if callable(join):
+                join(timeout=1.0)
+        except Exception:
+            pass
 
 
 _HELP = """\
@@ -438,7 +453,11 @@ def main() -> int:
         print(_HELP, end="")
         return 0
 
+    from .hf_hub import configure_hf_hub
+
     ensure_info_plist()
+    suppress_resource_tracker_warning()
+    configure_hf_hub()
 
     lock = SidecarLock()
     if not lock.acquire():
@@ -463,6 +482,7 @@ def main() -> int:
 
     def _quit_on_signal(*_args: object) -> None:
         cancel_active_sdk()
+        shutdown_resources()
         lock.release()
         print("\nВыход (Ctrl+C).", flush=True)
         os._exit(0)

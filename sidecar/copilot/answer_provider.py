@@ -24,9 +24,12 @@ from .terminal_display import InterviewAnswerStream, print_interview_answer
 from .cursor_bridge import (
     CursorBridgeError,
     answer_last_question,
+    answer_last_question_stream,
     load_bound_session,
     push_turn_to_agent,
 )
+
+_openai_clients: dict[tuple[str, str], object] = {}
 from .cursor_ide_chat import BIND_HELP, chat_is_bound
 from .transcript import compact_dialogue_context, last_interviewer_line
 
@@ -39,6 +42,23 @@ INTERVIEW_SYSTEM = (
 
 class AnswerProviderError(RuntimeError):
     pass
+
+
+def _openai_client(*, api_key: str, base_url: str | None):
+    try:
+        from openai import OpenAI
+    except ImportError as e:
+        raise AnswerProviderError("pip install -e 'sidecar/[openai]'") from e
+
+    cache_key = (api_key, base_url or "")
+    client = _openai_clients.get(cache_key)
+    if client is None:
+        kwargs: dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        client = OpenAI(**kwargs)
+        _openai_clients[cache_key] = client
+    return client
 
 
 def _build_user_message() -> str:
@@ -140,15 +160,7 @@ def _chat_complete(
     model: str,
     base_url: str | None = None,
 ) -> dict[str, Any]:
-    try:
-        from openai import OpenAI
-    except ImportError as e:
-        raise AnswerProviderError("pip install -e 'sidecar/[openai]'") from e
-
-    kwargs: dict[str, Any] = {"api_key": api_key}
-    if base_url:
-        kwargs["base_url"] = base_url
-    client = OpenAI(**kwargs)
+    client = _openai_client(api_key=api_key, base_url=base_url)
     resp = client.chat.completions.create(
         model=model,
         messages=[
@@ -170,15 +182,7 @@ def _chat_complete_stream(
     base_url: str | None,
     on_delta: Callable[[str], None],
 ) -> str:
-    try:
-        from openai import OpenAI
-    except ImportError as e:
-        raise AnswerProviderError("pip install -e 'sidecar/[openai]'") from e
-
-    kwargs: dict[str, Any] = {"api_key": api_key}
-    if base_url:
-        kwargs["base_url"] = base_url
-    client = OpenAI(**kwargs)
+    client = _openai_client(api_key=api_key, base_url=base_url)
     stream = client.chat.completions.create(
         model=model,
         messages=[
@@ -278,6 +282,23 @@ def answer_via_deepseek() -> dict[str, Any]:
 def answer_via_cursor() -> dict[str, Any]:
     question = last_interviewer_line() or ""
     model = cursor_model()
+
+    if terminal_answer_stream():
+
+        def collect(on_delta: Callable[[str], None]) -> str:
+            sdk = answer_last_question_stream(on_delta)
+            return (sdk.get("text") or "").strip()
+
+        meta = _publish_with_stream(
+            question, provider="cursor", model=model, collect=collect
+        )
+        return {
+            "status": "finished",
+            "provider": "cursor",
+            "model": model,
+            "runId": meta.get("runId"),
+            **meta,
+        }
 
     sdk = answer_last_question()
     text = (sdk.get("text") or "").strip()

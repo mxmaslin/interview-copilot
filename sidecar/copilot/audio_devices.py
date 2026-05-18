@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .config import audio_device_hint_interviewer
+from .config import audio_device_hint_interviewer, audio_prefer_16k, sample_rate as preferred_sample_rate
 
 
 class AudioDeviceNotFoundError(RuntimeError):
@@ -54,8 +54,9 @@ def _pick_sample_rate(device_index: int | None, preferred: int) -> int:
     import sounddevice as sd
 
     candidates: list[int] = []
-    for rate in (preferred, 48000, 44100, 16000):
-        if rate not in candidates:
+    pref16 = preferred_sample_rate() if audio_prefer_16k() else None
+    for rate in (pref16, preferred, 16000, 48000, 44100):
+        if rate is not None and rate not in candidates:
             candidates.append(rate)
 
     last_err: Exception | None = None
