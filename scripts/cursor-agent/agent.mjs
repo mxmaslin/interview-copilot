@@ -6,6 +6,7 @@
  *   node agent.mjs start [--cwd=path]
  *   node agent.mjs answer [--cwd=path]
  *   node agent.mjs push-turn --payload=/path/to.json
+ *   node agent.mjs solve-screenshot --payload=/path/to.json
  */
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
@@ -21,6 +22,12 @@ const STATE_FILE = join(STATE_DIR, "agent-state.json");
 const INTERVIEW_SYSTEM = `Ты — ассистент на техническом интервью (Python backend).
 Отвечай кратко на русском, EN-термины где уместно.
 Структура: определение → пример → оговорки. 5–8 предложений, для озвучивания вслух.`;
+
+const SCREENSHOT_SYSTEM = `Ты решаешь задачу с изображения (скриншот экрана).
+Ответ на русском, EN-термины где уместно.
+Если на картинке задача на код — дай готовое решение (код + краткое пояснение).
+Если теория — структура: определение → пример → оговорки.
+Без воды, сразу к решению.`;
 
 function envInt(name, fallback) {
   const v = process.env[name];
@@ -38,10 +45,37 @@ function modelId() {
   return (process.env.CURSOR_MODEL || "composer-2").trim();
 }
 
+function modelSelection() {
+  const raw = process.env.CURSOR_MODEL_JSON?.trim();
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      const id = (parsed.id || modelId()).trim();
+      const out = { id };
+      if (Array.isArray(parsed.params) && parsed.params.length) {
+        out.params = parsed.params.filter(
+          (p) => p && typeof p.id === "string" && p.value != null,
+        );
+      }
+      return out;
+    } catch {
+      /* fall through */
+    }
+  }
+  return { id: modelId() };
+}
+
+function modelLabel() {
+  const m = modelSelection();
+  if (!m.params?.length) return m.id;
+  const bits = m.params.map((p) => `${p.id}=${p.value}`);
+  return `${m.id}(${bits.join(",")})`;
+}
+
 function agentOptions(cwd) {
   return {
     apiKey: apiKey(),
-    model: { id: modelId() },
+    model: modelSelection(),
     name: "Copilot Interview",
     local: { cwd, settingSources: [] },
   };
@@ -196,7 +230,7 @@ async function cmdAnswer() {
 
   const prompt = buildAnswerPrompt(transcript, lastInterviewer);
   console.error(
-    `[cursor-agent] answer: resume ${state.agentId}, model=${modelId()}, prompt≈${prompt.length} chars`,
+    `[cursor-agent] answer: resume ${state.agentId}, model=${modelLabel()}, prompt≈${prompt.length} chars`,
   );
 
   const agent = await resumeAgent(state);
@@ -218,6 +252,57 @@ async function cmdAnswer() {
         status: result.status,
         runId: result.id,
         text,
+      }),
+    );
+    process.exit(result.status === "finished" ? 0 : 2);
+  } catch (err) {
+    handleError(err);
+  } finally {
+    await agent[Symbol.asyncDispose]();
+  }
+}
+
+async function cmdSolveScreenshot() {
+  const { pngBase64, mimeType = "image/png" } = payloadFromArgs();
+  if (!pngBase64?.trim()) {
+    console.error("solve-screenshot payload needs pngBase64");
+    process.exit(1);
+  }
+
+  const cwd = cwdFromArgs();
+  const prompt = {
+    text:
+      `${SCREENSHOT_SYSTEM}\n\n` +
+      "Реши задачу на изображении. " +
+      "Если это вопрос с вариантами — укажи правильный ответ и почему.",
+    images: [{ data: pngBase64.trim(), mimeType }],
+  };
+
+  console.error(
+    `[cursor-agent] solve-screenshot: model=${modelLabel()}, image≈${pngBase64.length} b64 chars`,
+  );
+
+  const agent = await createAgent(cwd);
+  const parts = [];
+  try {
+    const run = await agent.send(prompt, {
+      onDelta: ({ update }) => {
+        if (update?.type === "text-delta" && update.text) {
+          parts.push(update.text);
+          console.log(JSON.stringify({ event: "delta", text: update.text }));
+        }
+      },
+    });
+    const result = await run.wait();
+    const text = extractAssistantText(result) || parts.join("");
+    const resolved = result.model?.id || modelLabel();
+    console.log(
+      JSON.stringify({
+        event: "done",
+        status: result.status,
+        runId: result.id,
+        text,
+        model: resolved,
       }),
     );
     process.exit(result.status === "finished" ? 0 : 2);
@@ -297,7 +382,10 @@ switch (cmd) {
   case "push-turn":
     await cmdPushTurn();
     break;
+  case "solve-screenshot":
+    await cmdSolveScreenshot();
+    break;
   default:
-    console.error("Commands: start | answer | push-turn");
+    console.error("Commands: start | answer | push-turn | solve-screenshot");
     process.exit(1);
 }

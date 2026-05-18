@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Copilot
 
-Сессия интервью — только через **menubar sidecar (CP)** в **Terminal.app** (не терминал Cursor): «Начать интервью» → «Начать прослушивание» (STT), `⌘↩` ответ, `⌘G` очистка. Выход: **CP → Выход** или `scripts/kill-sidecar.sh`. См. `AGENTS.md`.
+Сессия интервью — только через **menubar sidecar (CP)** в **Terminal.app** (не терминал Cursor): «Начать интервью» → «Начать прослушивание» (STT), `⌘↩` ответ, `⌘G` очистка, **`⌘⌃⇧4`** скриншот → vision (`docs/screenshot-solve.md`). При `ANSWER_PROVIDER=deepseek` скриншоты → Cursor SDK, если есть `CURSOR_API_KEY`. Выход: **CP → Выход** или `scripts/kill-sidecar.sh`. См. `AGENTS.md`.
 
 Ответы на теорию: RU + EN-термины, структура «определение → пример → оговорки», без воды.
 

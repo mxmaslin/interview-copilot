@@ -117,7 +117,8 @@ AGENTS.md                      # поведение спец-агента
 scripts/cursor-agent/          # Node + @cursor/sdk
 sidecar/                       # menubar + hotkey + транскрипт
 data/transcript.md             # лог реплик
-data/last-answer.md            # последний ответ (⌘↩)
+data/last-answer.md            # последний ответ (⌘↩ / скриншот)
+data/last-screenshot-answer.md # последний ответ по скриншоту
 data/answers.log               # архив ответов
 data/agent-state.json          # опциональная привязка chatId Agents
 context/                       # резюме / вакансия (опционально)
@@ -128,11 +129,12 @@ context/                       # резюме / вакансия (опциона
 ```env
 ANSWER_PROVIDER=deepseek          # deepseek | openai | cursor
 DEEPSEEK_API_KEY=...
-CURSOR_API_KEY=...
-# CURSOR_AGENT_MIRROR=0           # по умолчанию: только терминал, без cursor CLI
-# CURSOR_OPEN_ANSWER_FILE=1       # открывать last-answer.md в Cursor
-CURSOR_MODEL=composer-2
-pip install -e "./sidecar[openai]"   # для DeepSeek/OpenAI
+CURSOR_API_KEY=...                # скриншоты: auto-fallback с deepseek (vision)
+CURSOR_MODEL=auto                 # или composer-2
+SCREENSHOT_SOLVE_ENABLED=1
+# CURSOR_AGENT_MIRROR=0
+# SCREENSHOT_ANSWER_PROVIDER=cursor
+pip install -e "./sidecar[openai]"   # DeepSeek/OpenAI; cursor — node + scripts/cursor-agent
 ```
 
 ### Тесты (sidecar)
@@ -143,12 +145,13 @@ pip install -e "./sidecar[dev,openai]"
 pytest sidecar/tests -q
 ```
 
-Покрыто: config, transcript, STT latency, Telegram input, streaming answers, audio, terminal_display, answer_delivery, cursor_bridge (51+ тестов). **Нет** e2e: DeepSeek, микрофон, `cursor agent`.
+Покрыто: config, transcript, STT, Telegram, streaming answers, screenshot (provider fallback, clipboard), cursor model resolve, audio (~70 тестов). **Нет** e2e: реальные API, микрофон, `cursor agent` UI.
 
 ## Аудио (Zoom / Telemost / Meet)
 
 Настройка BlackHole: **[docs/audio-setup.md](docs/audio-setup.md)**.  
-Вопросы текстом из Telegram: **[docs/telegram-input.md](docs/telegram-input.md)**.
+Вопросы текстом из Telegram: **[docs/telegram-input.md](docs/telegram-input.md)**.  
+Скриншот задачи: **[docs/screenshot-solve.md](docs/screenshot-solve.md)** (`⌘⌃⇧4`).
 
 **STT по умолчанию — локальный Whisper** (`faster-whisper`, без ключей). Подходит для Mac M4 + 24 GB, модель `small`:
 

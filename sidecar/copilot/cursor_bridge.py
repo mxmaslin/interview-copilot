@@ -9,7 +9,14 @@ from pathlib import Path
 
 from .cursor_stream import parse_answer_stream_line
 
-from .config import AGENT_STATE_PATH, CURSOR_AGENT_DIR, DATA_DIR, REPO_ROOT, cursor_api_key
+from .config import (
+    AGENT_STATE_PATH,
+    CURSOR_AGENT_DIR,
+    DATA_DIR,
+    REPO_ROOT,
+    cursor_api_key,
+)
+from .cursor_model_resolve import cursor_model_selection_json
 from .interview_quiet import log
 from .cursor_ide_chat import (
     BIND_HELP,
@@ -29,6 +36,7 @@ _proc_lock = threading.Lock()
 
 _TIMEOUT_START = 120
 _TIMEOUT_ANSWER = 180
+_TIMEOUT_SCREENSHOT = 240
 _TIMEOUT_PUSH = 120
 
 
@@ -90,18 +98,26 @@ def _log_sdk_stderr(stderr: str) -> None:
         log("[cursor-agent]", ln)
 
 
-def _run_node(command: str, *extra: str, timeout: int = _TIMEOUT_START) -> dict:
-    global _active_proc
+def _cursor_sdk_env() -> dict[str, str]:
     key = cursor_api_key()
     if not key:
         raise CursorBridgeError(
             "CURSOR_API_KEY не задан. Скопируй .env.example → .env и укажи ключ."
         )
+    return {
+        **os.environ,
+        "CURSOR_API_KEY": key,
+        "CURSOR_MODEL_JSON": cursor_model_selection_json(),
+    }
+
+
+def _run_node(command: str, *extra: str, timeout: int = _TIMEOUT_START) -> dict:
+    global _active_proc
     agent_script = CURSOR_AGENT_DIR / "agent.mjs"
     if not agent_script.exists():
         raise CursorBridgeError(f"Не найден {agent_script}")
 
-    env = {**os.environ, "CURSOR_API_KEY": key}
+    env = _cursor_sdk_env()
     cmd = ["node", str(agent_script), command, f"--cwd={REPO_ROOT}", *extra]
 
     proc = subprocess.Popen(
@@ -185,20 +201,19 @@ def answer_last_question() -> dict:
     return _run_node("answer", timeout=_TIMEOUT_ANSWER)
 
 
-def answer_last_question_stream(on_delta: Callable[[str], None]) -> dict:
-    """Cursor SDK answer с NDJSON delta на stdout (`agent.mjs answer`)."""
+def _run_node_stream(
+    command: str,
+    *extra: str,
+    on_delta: Callable[[str], None],
+    timeout: int,
+) -> dict:
     global _active_proc
-    key = cursor_api_key()
-    if not key:
-        raise CursorBridgeError(
-            "CURSOR_API_KEY не задан. Скопируй .env.example → .env и укажи ключ."
-        )
     agent_script = CURSOR_AGENT_DIR / "agent.mjs"
     if not agent_script.exists():
         raise CursorBridgeError(f"Не найден {agent_script}")
 
-    env = {**os.environ, "CURSOR_API_KEY": key}
-    cmd = ["node", str(agent_script), "answer", f"--cwd={REPO_ROOT}"]
+    env = _cursor_sdk_env()
+    cmd = ["node", str(agent_script), command, f"--cwd={REPO_ROOT}", *extra]
 
     proc = subprocess.Popen(
         cmd,
@@ -228,11 +243,11 @@ def answer_last_question_stream(on_delta: Callable[[str], None]) -> dict:
 
         assert proc.stderr is not None
         stderr_chunks.append(proc.stderr.read())
-        proc.wait(timeout=_TIMEOUT_ANSWER)
+        proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         cancel_active_sdk()
         raise CursorBridgeError(
-            f"Таймаут Cursor SDK ({_TIMEOUT_ANSWER} с). Закрой зависший Agent в Cursor или жми «Закончить интервью»."
+            f"Таймаут Cursor SDK ({timeout} с). Закрой зависший Agent в Cursor или жми «Закончить интервью»."
         ) from None
     finally:
         with _proc_lock:
@@ -254,8 +269,42 @@ def answer_last_question_stream(on_delta: Callable[[str], None]) -> dict:
         "status": final.get("status", "finished"),
         "text": (final.get("text") or "").strip(),
         "runId": final.get("runId"),
+        "model": final.get("model"),
     }
 
+
+def answer_last_question_stream(on_delta: Callable[[str], None]) -> dict:
+    """Cursor SDK answer с NDJSON delta на stdout (`agent.mjs answer`)."""
+    return _run_node_stream("answer", on_delta=on_delta, timeout=_TIMEOUT_ANSWER)
+
+
+def solve_screenshot_stream(
+    png_bytes: bytes,
+    *,
+    mime: str = "image/png",
+    on_delta: Callable[[str], None],
+) -> dict:
+    """Скриншот → Cursor SDK (agent.mjs solve-screenshot), ephemeral agent."""
+    import base64
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    payload_path = DATA_DIR / "screenshot-cursor-payload.json"
+    payload_path.write_text(
+        json.dumps(
+            {
+                "pngBase64": base64.standard_b64encode(png_bytes).decode("ascii"),
+                "mimeType": mime,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return _run_node_stream(
+        "solve-screenshot",
+        f"--payload={payload_path}",
+        on_delta=on_delta,
+        timeout=_TIMEOUT_SCREENSHOT,
+    )
 
 def agent_session_ready() -> bool:
     return chat_is_bound()

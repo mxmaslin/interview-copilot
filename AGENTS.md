@@ -13,7 +13,8 @@
 3. Реплики: STT (BlackHole + **Начать прослушивание**), текст в **Telegram-бота**, **CP → Добавить реплику…**, или `data/transcript.md`.
 4. **`⌘↩`** — в терминале **только вопрос и ответ** (ответ **по чанкам**, `TERMINAL_ANSWER_STREAM=1`) + `data/last-answer.md`.
 5. **`⌘G`** — очистить реплики `[Интервьюер]` и `[Я]` в `data/transcript.md` (новый вопрос с чистого листа).
-6. **CP → Закончить интервью** / **Выход** (или `./scripts/kill-sidecar.sh` из другого терминала — `Ctrl+C` часто не гасит sidecar).
+6. **`⌘⌃⇧4`** — скриншот в буфер → решение задачи в терминал (`SCREENSHOT_SOLVE_ENABLED=1`, см. `docs/screenshot-solve.md`).
+7. **CP → Закончить интервью** / **Выход** (или `./scripts/kill-sidecar.sh` из другого терминала — `Ctrl+C` часто не гасит sidecar).
 
 **Telegram:** бот = только **текст**; **звонок** = BlackHole + Multi-Output (см. `docs/telegram-input.md`). Звонок можно начать после «Начать прослушивание».
 
@@ -27,7 +28,9 @@
 | `openai` | То же через OpenAI Chat API |
 | `cursor` | Cursor SDK (`node agent.mjs answer`) |
 
-Ключи: `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`; `CURSOR_API_KEY` — только для `cursor`.
+Ключи: `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`; `CURSOR_API_KEY` — для `cursor` и для **скриншотов** (в т.ч. auto-fallback при `ANSWER_PROVIDER=deepseek`).
+
+Скриншоты (`docs/screenshot-solve.md`): `deepseek-chat` **без vision** → при `CURSOR_API_KEY` скрин идёт в Cursor SDK; `CURSOR_MODEL=auto` читает `~/.cursor/cli-config.json`.
 
 Полезные флаги:
 
@@ -35,6 +38,8 @@
 - `TERMINAL_ANSWER_STREAM=1` — печатать ответ в терминал по мере генерации (по умолчанию **вкл**).
 - `CURSOR_AGENT_MIRROR=0` — не дергать `cursor agent` при ответе (рекомендуется).
 - `ANSWER_REQUEST_TIMEOUT=120` — таймаут DeepSeek/OpenAI (сек), если меню CP «зависло» на ⌘↩.
+- `SCREENSHOT_SOLVE_ENABLED=1` — watcher буфера после ⌘⌃⇧4; `SCREENSHOT_ANSWER_PROVIDER` — переопределить vision-провайдер.
+- `CURSOR_MODEL=auto` — модель Cursor SDK из cli-config (`selectedModel`).
 
 ## Формат ответов на вопросы интервьюера
 

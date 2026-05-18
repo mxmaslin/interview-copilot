@@ -17,11 +17,14 @@ from .config import (
     whisper_api_model,
     whisper_beam_size,
     whisper_compute_type,
+    whisper_condition_on_previous,
     whisper_cpu_threads,
     whisper_device,
     whisper_local_size,
     whisper_vad_filter,
 )
+from .stt_glossary import apply_glossary_fixes
+from .stt_prompt import interview_whisper_prompt
 
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
@@ -31,12 +34,6 @@ logger = logging.getLogger(__name__)
 _local_model: WhisperModel | None = None
 _local_model_lock = threading.Lock()
 _warmup_thread: threading.Thread | None = None
-
-INTERVIEW_PROMPT = (
-    "Техническое интервью, Python backend, PostgreSQL, Redis, "
-    "asyncio, Docker, англоязычные IT-термины."
-)
-
 
 class STTError(RuntimeError):
     pass
@@ -143,19 +140,20 @@ def _transcribe_local(pcm: np.ndarray, sample_rate: int) -> str:
     if sample_rate != 16000:
         audio = _resample_to_16k(audio, sample_rate)
 
+    prompt = interview_whisper_prompt()
     segments, _ = model.transcribe(
         audio,
         language="ru",
         task="transcribe",
-        initial_prompt=INTERVIEW_PROMPT,
+        initial_prompt=prompt,
         beam_size=whisper_beam_size(),
         best_of=1,
         vad_filter=whisper_vad_filter(),
-        condition_on_previous_text=False,
+        condition_on_previous_text=whisper_condition_on_previous(),
         without_timestamps=True,
     )
     parts = [seg.text.strip() for seg in segments if seg.text.strip()]
-    return " ".join(parts).strip()
+    return apply_glossary_fixes(" ".join(parts).strip())
 
 
 def _resample_to_16k(audio: np.ndarray, sample_rate: int) -> np.ndarray:
@@ -201,8 +199,8 @@ def _transcribe_openai(pcm: np.ndarray, sample_rate: int) -> str:
                 model=whisper_api_model(),
                 file=audio_file,
                 language="ru",
-                prompt=INTERVIEW_PROMPT,
+                prompt=interview_whisper_prompt(),
             )
-        return (resp.text or "").strip()
+        return apply_glossary_fixes((resp.text or "").strip())
     finally:
         path.unlink(missing_ok=True)

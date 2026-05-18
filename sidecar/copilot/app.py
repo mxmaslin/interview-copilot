@@ -20,10 +20,16 @@ from .config import (
     audio_listen_self,
     cursor_agent_fresh_each_run,
     cursor_api_key,
+    screenshot_solve_enabled,
     telegram_input_enabled,
     terminal_show_interviewer_stt,
 )
 from .answer_provider import AnswerProviderError, dispatch_answer
+from .clipboard_watcher import ClipboardScreenshotWatcher
+from .screenshot_solve import (
+    screenshot_provider_hint,
+    solve_screenshot_from_clipboard,
+)
 from .terminal_display import print_interview_answer
 from .cursor_bridge import (
     CursorBridgeError,
@@ -61,6 +67,7 @@ class CopilotApp(rumps.App):
         self.session_active = False
         self._sdk_busy = False
         self._hotkey_listener = None
+        self._clipboard_watcher: ClipboardScreenshotWatcher | None = None
         self._resume_listening_after_sdk = False
         self._audio_interviewer = AudioListener(
             speaker="interviewer",
@@ -93,10 +100,18 @@ class CopilotApp(rumps.App):
             None,
             rumps.MenuItem(f"Ответ на последний вопрос ({HOTKEY})", callback=self.on_answer),
             rumps.MenuItem(f"Очистить транскрипт ({HOTKEY_CLEAR})", callback=self.on_clear_transcript),
+            rumps.MenuItem(
+                "Решить скриншот из буфера (⌘⌃⇧4)",
+                callback=self.on_screenshot_solve,
+            ),
             rumps.MenuItem("Отменить SDK запрос", callback=self.on_cancel_sdk),
             None,
             rumps.MenuItem("Открыть data/transcript.md", callback=self.on_open_transcript),
             rumps.MenuItem("Открыть последний ответ", callback=self.on_open_last_answer),
+            rumps.MenuItem(
+                "Открыть ответ по скриншоту",
+                callback=self.on_open_last_screenshot_answer,
+            ),
             rumps.MenuItem("Открыть Cursor-агента", callback=self.on_open_cursor_agent),
             rumps.MenuItem("Выход", callback=self.on_quit),
         ]
@@ -121,6 +136,8 @@ class CopilotApp(rumps.App):
         cid = sync_env_chat_binding()
         if cid:
             log("[copilot] chatId из .env:", cid)
+        if screenshot_solve_enabled():
+            self._start_clipboard_watcher()
 
     def on_start(self, _: object) -> None:
         from .stt import warmup_local_model
@@ -319,6 +336,78 @@ class CopilotApp(rumps.App):
         else:
             notify("Copilot", "SDK", "Запрос уже завершился.")
 
+    def _start_clipboard_watcher(self) -> None:
+        self._stop_clipboard_watcher()
+        if not screenshot_solve_enabled():
+            return
+        watcher = ClipboardScreenshotWatcher(
+            on_image=lambda: run_on_main(self._on_screenshot_clipboard, None)
+        )
+        watcher.start()
+        self._clipboard_watcher = watcher
+
+    def _stop_clipboard_watcher(self) -> None:
+        watcher = self._clipboard_watcher
+        self._clipboard_watcher = None
+        if watcher is not None:
+            watcher.stop()
+
+    def _on_screenshot_clipboard(self, _: object) -> None:
+        if self._sdk_busy:
+            notify("Copilot", "Подожди", "Уже идёт запрос (ответ или скриншот).")
+            return
+        self._begin_vision_request("буфер")
+
+    def on_screenshot_solve(self, _: object) -> None:
+        if self._sdk_busy:
+            notify("Copilot", "Подожди", "Уже идёт запрос.")
+            return
+        self._begin_vision_request("меню")
+
+    def _begin_vision_request(self, source: str) -> None:
+        self._sdk_busy = True
+        if answer_pause_audio():
+            self._pause_audio_for_sdk()
+        prov = screenshot_provider_hint()
+        self._set_status(f"скриншот ({prov})…")
+        log("[copilot] screenshot solve:", source)
+        threading.Thread(target=self._screenshot_worker, daemon=True).start()
+
+    def _screenshot_worker(self) -> None:
+        preview = ""
+        try:
+            result = solve_screenshot_from_clipboard()
+            text = (result.get("text") or "").strip()
+            preview = text[:500] + ("…" if len(text) > 500 else "")
+        except AnswerProviderError as e:
+            log("[copilot] screenshot ERROR:", e)
+            run_on_main(
+                lambda: notify("Copilot", "Скриншот", str(e)[:160]),
+                None,
+            )
+            if interview_active():
+                sys.stdout.write(f"\n[copilot] скриншот: {e}\n\n")
+                sys.stdout.flush()
+        except Exception as e:
+            log("[copilot] screenshot ERROR:", e)
+            import traceback
+
+            traceback.print_exc()
+            run_on_main(
+                lambda: notify("Copilot", "Скриншот", str(e)[:120]),
+                None,
+            )
+        finally:
+
+            def done() -> None:
+                self._sdk_busy = False
+                if preview:
+                    self._log_answer(preview)
+                self._set_status("интервью" if self.session_active else "ожидание")
+                self._resume_audio_if_needed()
+
+            run_on_main(done, None)
+
     def on_clear_transcript(self, _: object) -> None:
         clear_dialogue()
         if interview_active():
@@ -405,6 +494,17 @@ class CopilotApp(rumps.App):
             return
         reveal_in_cursor(LAST_ANSWER_PATH)
 
+    def on_open_last_screenshot_answer(self, _: object) -> None:
+        from .answer_delivery import LAST_SCREENSHOT_ANSWER_PATH, reveal_in_cursor
+
+        if not LAST_SCREENSHOT_ANSWER_PATH.exists():
+            rumps.alert(
+                "Нет ответа",
+                "Сначала реши скриншот (⌘⌃⇧4 или пункт меню).",
+            )
+            return
+        reveal_in_cursor(LAST_SCREENSHOT_ANSWER_PATH)
+
     def on_open_cursor_agent(self, _: object) -> None:
         if not chat_is_bound():
             rumps.alert("Нет привязки", BIND_HELP)
@@ -433,6 +533,7 @@ class CopilotApp(rumps.App):
         self._stop_all_audio()
         self._stop_telegram_input()
         self._stop_hotkey()
+        self._stop_clipboard_watcher()
         shutdown_resources()
         self._lock.release()
         rumps.quit_application()
@@ -496,6 +597,7 @@ copilot — macOS menubar sidecar
 Повторный запуск, пока sidecar жив, завершится с ошибкой.
 
 Hotkeys (после «Начать интервью»): ⌘↩ — ответ, ⌘G — очистить transcript.
+Скриншот: ⌘⌃⇧4 → буфер; SCREENSHOT_SOLVE_ENABLED=1 — авто-решение в терминал.
 
 Проверка, что вызывается наш бинарник:
   which copilot   # должен быть …/_copilot/.venv/bin/copilot
@@ -529,8 +631,9 @@ def main() -> int:
         flush=True,
     )
     print(
-        "[copilot] CP → Начать интервью; ⌘↩ ответ; ⌘G очистить транскрипт "
-        "(+ data/last-answer.md)",
+        "[copilot] CP → Начать интервью; ⌘↩ ответ; ⌘G очистить; "
+        "⌘⌃⇧4 скриншот → data/last-screenshot-answer.md "
+        "(SCREENSHOT_SOLVE_ENABLED=1 — авто)",
         flush=True,
     )
 

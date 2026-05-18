@@ -179,6 +179,58 @@ def print_interview_answer(
     stream.end()
 
 
+class ScreenshotAnswerStream:
+    """Потоковый вывод ответа по скриншоту из буфера обмена."""
+
+    def __init__(
+        self,
+        *,
+        provider: str = "",
+        model: str = "",
+    ) -> None:
+        self._provider = provider
+        self._model = model
+        self._begun = False
+
+    def begin(self) -> None:
+        if self._begun:
+            return
+        self._begun = True
+        label = _c("1;36", "Скриншот") if _use_color() else "Скриншот"
+        task = _c("1;33", "Задача") if _use_color() else "Задача"
+        ans = _c("1;32", "Решение") if _use_color() else "Решение"
+        sep = _c("2", "─" * min(40, _term_width() - 2)) if _use_color() else "─" * 40
+        prov = self._provider or "copilot"
+        if self._model:
+            prov = f"{prov} · {self._model}"
+        out = [
+            "",
+            label,
+            sep,
+            f"  {task}: изображение из буфера (⌘⌃⇧4)",
+            f"  {prov}",
+            "",
+            ans,
+            sep,
+        ]
+        sys.stdout.write("\n".join(out) + "\n")
+        sys.stdout.flush()
+
+    def write_chunk(self, text: str) -> None:
+        if not text:
+            return
+        if not self._begun:
+            self.begin()
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
+    def end(self) -> None:
+        if not self._begun:
+            return
+        sys.stdout.write("\n\n")
+        sys.stdout.flush()
+
+
 def print_interviewer_transcript(text: str) -> None:
     """Реплика интервьюера в stdout (после сегмента STT)."""
     if not text.strip():

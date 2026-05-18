@@ -8,6 +8,7 @@ from .config import DATA_DIR, REPO_ROOT
 from .interview_quiet import log
 
 LAST_ANSWER_PATH = DATA_DIR / "last-answer.md"
+LAST_SCREENSHOT_ANSWER_PATH = DATA_DIR / "last-screenshot-answer.md"
 
 
 def write_last_answer(
@@ -27,6 +28,24 @@ def write_last_answer(
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     LAST_ANSWER_PATH.write_text(body, encoding="utf-8")
     return LAST_ANSWER_PATH
+
+
+def write_last_screenshot_answer(
+    answer: str,
+    *,
+    provider: str,
+    model: str = "",
+) -> Path:
+    label = f"{provider} ({model})" if model else provider
+    body = (
+        f"# Ответ по скриншоту (Copilot)\n\n"
+        f"**Источник:** {label}\n\n"
+        f"## Задача\n\nСкриншот из буфера обмена (⌘⌃⇧4).\n\n"
+        f"## Решение\n\n{answer.strip()}\n"
+    )
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    LAST_SCREENSHOT_ANSWER_PATH.write_text(body, encoding="utf-8")
+    return LAST_SCREENSHOT_ANSWER_PATH
 
 
 def reveal_in_cursor(path: Path | None = None) -> None:

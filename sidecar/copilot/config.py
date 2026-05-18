@@ -141,6 +141,24 @@ def whisper_beam_size() -> int:
         return 1
 
 
+def whisper_initial_prompt() -> str:
+    """Полная замена дефолтного prompt (см. stt_prompt.py)."""
+    return _env("WHISPER_INITIAL_PROMPT")
+
+
+def whisper_glossary_fixes() -> bool:
+    """Пост-правка типичных RU-искажений терминов (GIL, Redis, …)."""
+    return _env("WHISPER_GLOSSARY_FIXES", "1").lower() not in ("0", "false", "no")
+
+
+def whisper_condition_on_previous() -> bool:
+    """Контекст между сегментами — лучше термины, чуть медленнее."""
+    explicit = _env("WHISPER_CONDITION_PREVIOUS", "")
+    if explicit:
+        return explicit.lower() not in ("0", "false", "no")
+    return stt_latency_preset() == "quality"
+
+
 def whisper_vad_filter() -> bool:
     explicit = _env("WHISPER_VAD_FILTER", "")
     if explicit:
@@ -224,8 +242,10 @@ def deepseek_answer_model() -> str:
 
 
 def cursor_model() -> str:
-    # composer-2-fast нет в Cursor API — см. Cursor.models.list()
-    return _env("CURSOR_MODEL", "composer-2")
+    """Slug для логов; auto → ~/.cursor/cli-config.json (selectedModel)."""
+    from .cursor_model_resolve import cursor_model_label
+
+    return cursor_model_label()
 
 
 def answer_context_chars() -> int:
@@ -320,3 +340,81 @@ def terminal_show_interviewer_stt() -> bool:
 def terminal_answer_stream() -> bool:
     """Печатать ответ ⌘↩ в терминал по чанкам (OpenAI/DeepSeek stream)."""
     return _env("TERMINAL_ANSWER_STREAM", "1").lower() not in ("0", "false", "no")
+
+
+def screenshot_solve_enabled() -> bool:
+    """⌘⌃⇧4 → буфер → vision API (pasteboard watcher)."""
+    return _env("SCREENSHOT_SOLVE_ENABLED", "1").lower() not in ("0", "false", "no")
+
+
+def screenshot_poll_sec() -> float:
+    try:
+        return float(_env("SCREENSHOT_POLL_SEC", "0.35"))
+    except ValueError:
+        return 0.35
+
+
+def screenshot_debounce_sec() -> float:
+    """Пауза после changeCount, пока macOS допишет PNG в буфер."""
+    try:
+        return float(_env("SCREENSHOT_DEBOUNCE_SEC", "0.25"))
+    except ValueError:
+        return 0.25
+
+
+def screenshot_answer_provider() -> str:
+    """
+    Провайдер vision для скриншота.
+    deepseek-chat не принимает image_url → при ANSWER_PROVIDER=deepseek
+    автоматически cursor (если CURSOR_API_KEY) или openai.
+    """
+    explicit = _env("SCREENSHOT_ANSWER_PROVIDER").lower()
+    if explicit:
+        return explicit
+    base = answer_provider()
+    if base != "deepseek":
+        return base
+    if cursor_api_key():
+        return "cursor"
+    if openai_api_key():
+        return "openai"
+    return "deepseek"
+
+
+def screenshot_vision_model(provider: str) -> str:
+    explicit = _env("SCREENSHOT_VISION_MODEL") or _env("SCREENSHOT_SOLVE_MODEL")
+    if explicit:
+        return explicit
+    if provider == "openai":
+        return _env("SCREENSHOT_OPENAI_MODEL", "gpt-4o-mini")
+    if provider == "deepseek":
+        return _env("SCREENSHOT_DEEPSEEK_MODEL", "deepseek-chat")
+    if provider == "cursor":
+        return cursor_model()
+    return "gpt-4o-mini"
+
+
+def screenshot_solve_debounce_sec() -> float:
+    raw = _env("SCREENSHOT_DEBOUNCE_SEC") or _env("SCREENSHOT_SOLVE_DEBOUNCE_SEC", "0.35")
+    try:
+        return float(raw)
+    except ValueError:
+        return 0.35
+
+
+def screenshot_solve_also_last_answer() -> bool:
+    """Дублировать ответ ещё в data/last-answer.md."""
+    return _env("SCREENSHOT_SOLVE_ALSO_LAST_ANSWER", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    )
+
+
+def screenshot_clear_clipboard() -> bool:
+    """Очистить буфер после успешного ответа по скриншоту."""
+    return _env("SCREENSHOT_CLEAR_CLIPBOARD", "1").lower() not in (
+        "0",
+        "false",
+        "no",
+    )
