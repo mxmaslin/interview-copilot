@@ -436,6 +436,11 @@ class CopilotApp(rumps.App):
                     self._log_answer(preview)
                 self._set_status("интервью" if self.session_active else "ожидание")
                 self._resume_audio_if_needed()
+                watcher = self._clipboard_watcher
+                if watcher is not None:
+                    watcher.kick_pending(
+                        lambda: self._begin_vision_request("буфер-отложенный")
+                    )
 
             run_on_main(done, None)
 

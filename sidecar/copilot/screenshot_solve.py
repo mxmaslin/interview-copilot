@@ -6,7 +6,11 @@ from typing import Any
 
 from .answer_delivery import write_last_answer, write_last_screenshot_answer
 from .answer_provider import AnswerProviderError, _openai_client
-from .clipboard_image import clear_clipboard, read_clipboard_image
+from .clipboard_image import (
+    clear_clipboard,
+    pasteboard_change_count,
+    read_clipboard_image,
+)
 from .screenshot_optimize import optimize_screenshot_image
 from .clipboard_watcher import notify_clipboard_cleared
 from .config import (
@@ -142,18 +146,45 @@ def _chat_once(
     return (resp.choices[0].message.content or "").strip()
 
 
+def _maybe_clear_clipboard_after_screenshot(paste_count_at_read: int) -> bool:
+    """Не затирать новый скрин, если пользователь успел положить его в буфер во время SDK."""
+    if not screenshot_clear_clipboard():
+        return False
+    try:
+        if pasteboard_change_count() != paste_count_at_read:
+            log(
+                "[copilot] буфер не очищаем — пока шёл ответ SDK, "
+                "в буфере уже другой скриншот"
+            )
+            return False
+        cleared = clear_clipboard()
+        if cleared:
+            notify_clipboard_cleared()
+            log("[copilot] буфер обмена очищен")
+        return cleared
+    except Exception as e:
+        log("[copilot] WARN: не удалось очистить буфер:", e)
+        return False
+
+
 def solve_screenshot_from_clipboard() -> dict[str, Any]:
+    paste_count_at_read = pasteboard_change_count()
     item = read_clipboard_image()
     if item is None:
         raise AnswerProviderError(
             "В буфере нет изображения. Сделай ⌘⌃⇧4 (выделение → в буфер)."
         )
     data, mime = item
-    return solve_screenshot_png(data, mime=mime)
+    return solve_screenshot_png(
+        data, mime=mime, paste_count_at_read=paste_count_at_read
+    )
 
 
 def solve_screenshot_png(
-    png_bytes: bytes, *, mime: str = "image/png"
+    png_bytes: bytes,
+    *,
+    mime: str = "image/png",
+    paste_count_at_read: int | None = None,
 ) -> dict[str, Any]:
     """Отправить изображение (из буфера ⌘⌃⇧4) в vision-модель."""
     if not png_bytes:
@@ -294,15 +325,12 @@ def solve_screenshot_png(
             SCREENSHOT_LABEL, text, provider=provider, model=model
         )
     log("[copilot] screenshot answer:", shot_path)
-    clipboard_cleared = False
-    if screenshot_clear_clipboard():
-        try:
-            clipboard_cleared = clear_clipboard()
-            notify_clipboard_cleared()
-            if clipboard_cleared:
-                log("[copilot] буфер обмена очищен")
-        except Exception as e:
-            log("[copilot] WARN: не удалось очистить буфер:", e)
+    count_at_read = (
+        paste_count_at_read
+        if paste_count_at_read is not None
+        else pasteboard_change_count()
+    )
+    clipboard_cleared = _maybe_clear_clipboard_after_screenshot(count_at_read)
     return {
         "status": "finished",
         "text": text,
