@@ -146,25 +146,27 @@ def _chat_once(
     return (resp.choices[0].message.content or "").strip()
 
 
-def _maybe_clear_clipboard_after_screenshot(paste_count_at_read: int) -> bool:
-    """Не затирать новый скрин, если пользователь успел положить его в буфер во время SDK."""
+def _maybe_clear_clipboard_after_screenshot(
+    paste_count_at_read: int,
+) -> tuple[bool, bool]:
+    """(cleared, deferred) — deferred=True если в буфере уже лежит следующий скрин."""
     if not screenshot_clear_clipboard():
-        return False
+        return False, False
     try:
         if pasteboard_change_count() != paste_count_at_read:
             log(
                 "[copilot] буфер не очищаем — пока шёл ответ SDK, "
                 "в буфере уже другой скриншот"
             )
-            return False
+            return False, True
         cleared = clear_clipboard()
         if cleared:
             notify_clipboard_cleared()
             log("[copilot] буфер обмена очищен")
-        return cleared
+        return cleared, False
     except Exception as e:
         log("[copilot] WARN: не удалось очистить буфер:", e)
-        return False
+        return False, False
 
 
 def solve_screenshot_from_clipboard() -> dict[str, Any]:
@@ -330,7 +332,9 @@ def solve_screenshot_png(
         if paste_count_at_read is not None
         else pasteboard_change_count()
     )
-    clipboard_cleared = _maybe_clear_clipboard_after_screenshot(count_at_read)
+    clipboard_cleared, clipboard_deferred = _maybe_clear_clipboard_after_screenshot(
+        count_at_read
+    )
     return {
         "status": "finished",
         "text": text,
@@ -340,4 +344,5 @@ def solve_screenshot_png(
         "answer_path": str(answer_path),
         "terminal": True,
         "clipboard_cleared": clipboard_cleared,
+        "clipboard_deferred": clipboard_deferred,
     }

@@ -97,15 +97,14 @@ class ClipboardScreenshotWatcher:
 
                 traceback.print_exc()
 
-    def kick_pending(self, start: Callable[[], None] | None = None) -> None:
+    def kick_pending(
+        self,
+        start: Callable[[], None] | None = None,
+        *,
+        force: bool = False,
+    ) -> None:
         """После освобождения SDK — обработать скрин, оставшийся в буфере."""
         if not self._can_process():
-            return
-        try:
-            count = pasteboard_change_count()
-        except Exception:
-            return
-        if count == self._last_count:
             return
         try:
             item = read_clipboard_image()
@@ -113,12 +112,18 @@ class ClipboardScreenshotWatcher:
             log("[copilot] clipboard kick:", e)
             return
         if item is None:
-            self._last_count = count
+            return
+        data, _mime = item
+        fp = image_fingerprint(data)
+        try:
+            count = pasteboard_change_count()
+        except Exception:
+            count = self._last_count
+        if not force and count == self._last_count and fp == self._last_fingerprint:
             return
         self._last_count = count
+        self._last_fingerprint = fp
         self._busy_skip_logged = False
-        data, _mime = item
-        self._last_fingerprint = image_fingerprint(data)
         log("[copilot] скриншот: обрабатываем отложенный кадр из буфера")
         (start or self._on_image)()
 

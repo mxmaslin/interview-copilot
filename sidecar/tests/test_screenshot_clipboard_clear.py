@@ -17,10 +17,14 @@ def test_skip_clear_when_pasteboard_changed(monkeypatch) -> None:
         return True
 
     monkeypatch.setattr(ss, "clear_clipboard", do_clear)
-    assert ss._maybe_clear_clipboard_after_screenshot(10) is True
+    ok, deferred = ss._maybe_clear_clipboard_after_screenshot(10)
+    assert ok is True
+    assert deferred is False
     assert cleared
 
     counts["n"] = 11
     cleared.clear()
-    assert ss._maybe_clear_clipboard_after_screenshot(10) is False
+    ok, deferred = ss._maybe_clear_clipboard_after_screenshot(10)
+    assert ok is False
+    assert deferred is True
     assert not cleared

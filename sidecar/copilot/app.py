@@ -406,10 +406,12 @@ class CopilotApp(rumps.App):
 
     def _screenshot_worker(self) -> None:
         preview = ""
+        deferred_clipboard = False
         try:
             result = solve_screenshot_from_clipboard()
             text = (result.get("text") or "").strip()
             preview = text[:500] + ("…" if len(text) > 500 else "")
+            deferred_clipboard = bool(result.get("clipboard_deferred"))
         except AnswerProviderError as e:
             log("[copilot] screenshot ERROR:", e)
             run_on_main(
@@ -437,9 +439,10 @@ class CopilotApp(rumps.App):
                 self._set_status("интервью" if self.session_active else "ожидание")
                 self._resume_audio_if_needed()
                 watcher = self._clipboard_watcher
-                if watcher is not None:
+                if watcher is not None and deferred_clipboard:
                     watcher.kick_pending(
-                        lambda: self._begin_vision_request("буфер-отложенный")
+                        lambda: self._begin_vision_request("буфер-отложенный"),
+                        force=True,
                     )
 
             run_on_main(done, None)
