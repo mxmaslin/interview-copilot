@@ -8,11 +8,14 @@ sidecar/*.egg-info/
 .pytest_cache/
 .DS_Store
 data/agent-state.json
+data/screenshot-agent-state.json
+data/screenshot-cursor-payload.json
 data/sidecar.lock
 data/push-turn.json
 data/telegram-update-offset.json
 data/transcript.md
 data/last-answer.md
+data/last-screenshot-answer.md
 data/answers.log
 .vscode/zsh/.zsh_history
 .vscode/zsh/.zcompdump*

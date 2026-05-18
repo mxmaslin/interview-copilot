@@ -231,14 +231,23 @@ class ScreenshotAnswerStream:
         sys.stdout.flush()
 
 
-def print_interviewer_transcript(text: str) -> None:
-    """Реплика интервьюера в stdout (после сегмента STT)."""
+def _print_speaker_transcript(text: str, *, label: str, color: str) -> None:
     if not text.strip():
         return
-    label = _c("1;33", "Интервьюер") if _use_color() else "Интервьюер"
+    head = _c(color, label) if _use_color() else label
     sep = _c("2", "─" * min(40, _term_width() - 2)) if _use_color() else "─" * 40
-    out: list[str] = ["", label, sep]
+    out: list[str] = ["", head, sep]
     out.extend(_wrap_block(text.strip(), indent=""))
     out.append("")
     sys.stdout.write("\n".join(out) + "\n")
     sys.stdout.flush()
+
+
+def print_interviewer_transcript(text: str) -> None:
+    """Реплика интервьюера в stdout (после сегмента STT)."""
+    _print_speaker_transcript(text, label="Интервьюер", color="1;33")
+
+
+def print_self_transcript(text: str) -> None:
+    """Своя реплика с микрофона в stdout."""
+    _print_speaker_transcript(text, label="Я", color="1;36")

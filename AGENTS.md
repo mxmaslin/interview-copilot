@@ -50,9 +50,11 @@
 ## Транскрипт
 
 - `[Интервьюер]:` — звук созвона (BlackHole) и/или **Telegram** (`TELEGRAM_INPUT_ENABLED=1`, см. `docs/telegram-input.md`); при **Начать интервью** — в терминал (`TERMINAL_SHOW_INTERVIEWER=1`); STT ещё нужно **Начать прослушивание**
-- `[Я]:` — микрофон (`AUDIO_INPUT_SELF`)
+- `[Я]:` — микрофон (`AUDIO_INPUT_SELF`); в терминал при `TERMINAL_SHOW_SELF=1`
 
-На **⌘↩** — **последний блок подряд** `[Интервьюер]:` (несколько сегментов STT подряд = один вопрос; после `[Я]:` — новый вопрос). STT: `STT_LATENCY=fast`, модель `small`. Ответ: терминал (stream) + `data/last-answer.md`.
+На **⌘↩** — последний блок `[Интервьюер]` с конца (хвостовые `[Я]` после реплики собеседника **не** блокируют вопрос). STT: `STT_LATENCY`, `WHISPER_PROMPT_MODE=interview|general`. Ответ: терминал (stream) + `data/last-answer.md`.
+
+**STT и скриншот:** скрин **⌘⌃⇧4** глушит микрофон на время vision; после ответа STT снова включается, если было **Начать прослушивание**. **⌘↩** с `deepseek` STT не глушит. См. `docs/audio-setup.md`.
 
 ## Разработка проекта copilot
 

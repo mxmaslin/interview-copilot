@@ -87,5 +87,29 @@ def cursor_model_label(selection: dict[str, Any] | None = None) -> str:
     return f"{mid}({','.join(bits)})" if bits else mid
 
 
+def resolve_screenshot_cursor_model_selection() -> dict[str, Any]:
+    """Модель только для solve-screenshot; иначе как ⌘↩ (CURSOR_MODEL)."""
+    raw = _env("SCREENSHOT_CURSOR_MODEL")
+    if not raw:
+        return resolve_cursor_model_selection()
+    if raw.lower() in ("auto", "cli", "cli-config"):
+        picked = read_cli_config_model()
+        return picked if picked else {"id": _DEFAULT_ID}
+    out: dict[str, Any] = {"id": raw or _DEFAULT_ID}
+    params_raw = _env("SCREENSHOT_CURSOR_MODEL_PARAMS")
+    if params_raw:
+        try:
+            parsed = json.loads(params_raw)
+            if isinstance(parsed, list):
+                out["params"] = parsed
+        except json.JSONDecodeError:
+            pass
+    return out
+
+
+def screenshot_cursor_model_selection_json() -> str:
+    return json.dumps(resolve_screenshot_cursor_model_selection(), ensure_ascii=False)
+
+
 def cursor_model_selection_json() -> str:
     return json.dumps(resolve_cursor_model_selection(), ensure_ascii=False)

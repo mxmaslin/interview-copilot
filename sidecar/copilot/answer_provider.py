@@ -148,7 +148,18 @@ def _publish_with_stream(
         stream.write_chunk(delta)
 
     text = collect(on_delta).strip() or "".join(parts).strip()
+    if not text:
+        stream.write_chunk(
+            "\n[copilot] Пустой ответ от провайдера — "
+            "проверь agent.mjs start или ANSWER_PROVIDER=deepseek\n"
+        )
     stream.end()
+    if not text:
+        raise AnswerProviderError(
+            f"Пустой ответ ({provider}). "
+            "Cursor: node scripts/cursor-agent/agent.mjs start; "
+            "или ANSWER_PROVIDER=deepseek в .env"
+        )
     meta = _finalize_answer(question, text, provider=provider, model=model)
     meta["terminal"] = True
     meta["text"] = text
@@ -304,6 +315,11 @@ def answer_via_cursor() -> dict[str, Any]:
 
     sdk = answer_last_question()
     text = (sdk.get("text") or "").strip()
+    if not text:
+        raise AnswerProviderError(
+            "Пустой ответ (cursor). "
+            "node scripts/cursor-agent/agent.mjs start или ANSWER_PROVIDER=deepseek"
+        )
     result = {
         "status": sdk.get("status", "finished"),
         "text": text,

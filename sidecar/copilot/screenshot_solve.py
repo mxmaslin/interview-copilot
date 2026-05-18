@@ -7,6 +7,7 @@ from typing import Any
 from .answer_delivery import write_last_answer, write_last_screenshot_answer
 from .answer_provider import AnswerProviderError, _openai_client
 from .clipboard_image import clear_clipboard, read_clipboard_image
+from .screenshot_optimize import optimize_screenshot_image
 from .clipboard_watcher import notify_clipboard_cleared
 from .config import (
     answer_max_tokens,
@@ -15,14 +16,17 @@ from .config import (
     cursor_api_key,
     deepseek_api_base,
     deepseek_api_key,
+    anthropic_api_key,
     openai_api_key,
     screenshot_answer_provider,
     screenshot_clear_clipboard,
+    screenshot_openai_base_url,
     screenshot_solve_also_last_answer,
     screenshot_vision_model,
     terminal_answer_stream,
 )
 from .cursor_bridge import CursorBridgeError, solve_screenshot_stream
+from .screenshot_anthropic import anthropic_vision_once, anthropic_vision_stream
 from .interview_quiet import log
 from .terminal_display import ScreenshotAnswerStream, print_interview_answer
 
@@ -71,23 +75,26 @@ def _resolve_provider() -> str:
         )
     if provider == "openai" and not openai_api_key():
         raise AnswerProviderError("SCREENSHOT_ANSWER_PROVIDER=openai, но OPENAI_API_KEY пуст.")
+    if provider == "anthropic" and not anthropic_api_key():
+        raise AnswerProviderError(
+            "SCREENSHOT_ANSWER_PROVIDER=anthropic, но ANTHROPIC_API_KEY не задан."
+        )
     if provider == "deepseek":
         raise AnswerProviderError(
             "deepseek-chat не поддерживает картинки в API. "
-            "Добавь CURSOR_API_KEY (авто-fallback на cursor) "
-            "или SCREENSHOT_ANSWER_PROVIDER=openai."
+            "Добавь ANTHROPIC_API_KEY, CURSOR_API_KEY или SCREENSHOT_ANSWER_PROVIDER=openai."
         )
-    if provider not in ("openai", "deepseek", "cursor"):
+    if provider not in ("openai", "deepseek", "cursor", "anthropic"):
         raise AnswerProviderError(
             f"Неизвестный SCREENSHOT_ANSWER_PROVIDER={provider!r}. "
-            "Допустимо: cursor | openai | deepseek."
+            "Допустимо: cursor | openai | anthropic | deepseek."
         )
     return provider
 
 
 def _api_credentials(provider: str) -> tuple[str, str | None]:
     if provider == "openai":
-        return openai_api_key() or "", None
+        return openai_api_key() or "", screenshot_openai_base_url()
     return deepseek_api_key() or "", deepseek_api_base()
 
 
@@ -151,6 +158,7 @@ def solve_screenshot_png(
     """Отправить изображение (из буфера ⌘⌃⇧4) в vision-модель."""
     if not png_bytes:
         raise AnswerProviderError("Пустое изображение.")
+    png_bytes, mime = optimize_screenshot_image(png_bytes, mime)
     provider = _resolve_provider()
     model = screenshot_vision_model(provider)
     base = answer_provider()
@@ -181,7 +189,17 @@ def solve_screenshot_png(
                 raise AnswerProviderError(str(e)) from e
             text = (sdk.get("text") or "").strip() or "".join(parts).strip()
             model = str(sdk.get("model") or model)
+            if not text:
+                stream.write_chunk(
+                    "\n[copilot] Пустой ответ Cursor по скриншоту — "
+                    "попробуй SCREENSHOT_ANSWER_PROVIDER=anthropic или openai\n"
+                )
             stream.end()
+            if not text:
+                raise AnswerProviderError(
+                    "Cursor SDK вернул пустой ответ по скриншоту. "
+                    "В .env: SCREENSHOT_ANSWER_PROVIDER=anthropic (быстрее) или openai."
+                )
         else:
             parts: list[str] = []
 
@@ -195,6 +213,42 @@ def solve_screenshot_png(
                 raise AnswerProviderError(str(e)) from e
             text = (sdk.get("text") or "").strip() or "".join(parts).strip()
             model = str(sdk.get("model") or model)
+            if not text:
+                raise AnswerProviderError(
+                    "Cursor SDK вернул пустой ответ по скриншоту. "
+                    "SCREENSHOT_ANSWER_PROVIDER=anthropic или openai."
+                )
+            print_interview_answer(
+                SCREENSHOT_LABEL, text, provider=provider, model=model
+            )
+    elif provider == "anthropic":
+        stream = ScreenshotAnswerStream(provider=provider, model=model)
+        if terminal_answer_stream():
+            stream.begin()
+            parts: list[str] = []
+
+            def on_delta(delta: str) -> None:
+                if delta:
+                    parts.append(delta)
+                    stream.write_chunk(delta)
+
+            text = anthropic_vision_stream(
+                image_bytes=png_bytes,
+                mime=mime,
+                model=model,
+                system=SCREENSHOT_SYSTEM,
+                user_text=USER_TEXT,
+                on_delta=on_delta,
+            ).strip() or "".join(parts).strip()
+            stream.end()
+        else:
+            text = anthropic_vision_once(
+                image_bytes=png_bytes,
+                mime=mime,
+                model=model,
+                system=SCREENSHOT_SYSTEM,
+                user_text=USER_TEXT,
+            )
             print_interview_answer(
                 SCREENSHOT_LABEL, text, provider=provider, model=model
             )

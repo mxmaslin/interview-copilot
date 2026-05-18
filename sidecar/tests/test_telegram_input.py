@@ -43,4 +43,20 @@ def test_parse_telegram_updates() -> None:
         },
     ]
     parsed = parse_telegram_updates(raw)
-    assert parsed == [(10, 111, "Что такое GIL?"), (11, 222, "ignored")]
+    assert parsed == [
+        (10, 111, "Что такое GIL?", None),
+        (11, 222, "ignored", None),
+    ]
+
+
+def test_parse_telegram_voice() -> None:
+    raw = [
+        {
+            "update_id": 12,
+            "message": {
+                "chat": {"id": 111},
+                "voice": {"file_id": "voice_abc", "duration": 3},
+            },
+        },
+    ]
+    assert parse_telegram_updates(raw) == [(12, 111, None, "voice_abc")]

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import logging
+import shutil
+import subprocess
 import tempfile
 import threading
 import wave
@@ -51,10 +53,25 @@ def transcribe_pcm16_mono(pcm: np.ndarray, sample_rate: int) -> str:
     raise STTError(f"Неизвестный STT_PROVIDER={provider!r}. Используй local или openai.")
 
 
+def transcribe_audio_file(path: Path | str) -> str:
+    """Файл с диска (например голосовое из Telegram .ogg)."""
+    audio_path = Path(path)
+    if not audio_path.is_file() or audio_path.stat().st_size == 0:
+        return ""
+    provider = stt_provider()
+    if provider == "local":
+        return _transcribe_local_file(audio_path)
+    if provider == "openai":
+        return _transcribe_openai_file(audio_path)
+    raise STTError(f"Неизвестный STT_PROVIDER={provider!r}.")
+
+
 def warmup_local_model() -> None:
     """Предзагрузка модели в фоне (первый запуск может занять минуту)."""
     global _warmup_thread
     if stt_provider() != "local":
+        return
+    if _warmup_thread is not None and _warmup_thread.is_alive():
         return
 
     def _load() -> None:
@@ -154,6 +171,65 @@ def _transcribe_local(pcm: np.ndarray, sample_rate: int) -> str:
     )
     parts = [seg.text.strip() for seg in segments if seg.text.strip()]
     return apply_glossary_fixes(" ".join(parts).strip())
+
+
+def _transcribe_local_file(path: Path) -> str:
+    model = _get_local_model()
+    prompt = interview_whisper_prompt()
+    segments, _ = model.transcribe(
+        str(path),
+        language="ru",
+        task="transcribe",
+        initial_prompt=prompt,
+        beam_size=whisper_beam_size(),
+        best_of=1,
+        vad_filter=whisper_vad_filter(),
+        condition_on_previous_text=whisper_condition_on_previous(),
+        without_timestamps=True,
+    )
+    parts = [seg.text.strip() for seg in segments if seg.text.strip()]
+    return apply_glossary_fixes(" ".join(parts).strip())
+
+
+def _transcribe_openai_file(path: Path) -> str:
+    wav_path = path
+    tmp: Path | None = None
+    if path.suffix.lower() != ".wav":
+        if not shutil.which("ffmpeg"):
+            raise STTError(
+                "Для голосовых Telegram при STT_PROVIDER=openai нужен ffmpeg "
+                "(brew install ffmpeg) или STT_PROVIDER=local."
+            )
+        tmp = Path(tempfile.mkstemp(suffix=".wav")[1])
+        proc = subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(path),
+                "-ar",
+                "16000",
+                "-ac",
+                "1",
+                str(tmp),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            raise STTError((proc.stderr or "ffmpeg failed")[:300])
+        wav_path = tmp
+    try:
+        with wave.open(str(wav_path), "rb") as wf:
+            rate = wf.getframerate()
+            frames = wf.readframes(wf.getnframes())
+        pcm = np.frombuffer(frames, dtype=np.int16)
+        if wf.getnchannels() > 1:
+            pcm = pcm.reshape(-1, wf.getnchannels())[:, 0]
+        return _transcribe_openai(pcm, rate)
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
 
 
 def _resample_to_16k(audio: np.ndarray, sample_rate: int) -> np.ndarray:

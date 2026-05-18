@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import sys
@@ -8,6 +9,8 @@ import time
 from datetime import datetime, timezone
 
 import rumps
+
+logger = logging.getLogger(__name__)
 
 from .config import (
     ANSWERS_PATH,
@@ -23,9 +26,10 @@ from .config import (
     screenshot_solve_enabled,
     telegram_input_enabled,
     terminal_show_interviewer_stt,
+    terminal_show_self_stt,
 )
 from .answer_provider import AnswerProviderError, dispatch_answer
-from .clipboard_watcher import ClipboardScreenshotWatcher
+from .clipboard_watcher import ClipboardScreenshotWatcher, notify_clipboard_cleared
 from .screenshot_solve import (
     screenshot_provider_hint,
     solve_screenshot_from_clipboard,
@@ -45,7 +49,7 @@ from .cursor_ide_chat import (
     sync_env_chat_binding,
 )
 from .interview_quiet import interview_active, log, set_interview_active
-from .terminal_display import print_interviewer_transcript
+from .terminal_display import print_interviewer_transcript, print_self_transcript
 from .shutdown import shutdown_resources, suppress_resource_tracker_warning
 from .instance import SidecarLock
 from .audio_devices import AudioDeviceNotFoundError
@@ -68,7 +72,8 @@ class CopilotApp(rumps.App):
         self._sdk_busy = False
         self._hotkey_listener = None
         self._clipboard_watcher: ClipboardScreenshotWatcher | None = None
-        self._resume_listening_after_sdk = False
+        self._listening_active = False
+        self._sdk_pause_depth = 0
         self._audio_interviewer = AudioListener(
             speaker="interviewer",
             device_hint=audio_device_hint_interviewer(),
@@ -138,14 +143,17 @@ class CopilotApp(rumps.App):
             log("[copilot] chatId из .env:", cid)
         if screenshot_solve_enabled():
             self._start_clipboard_watcher()
+        from .session_warmup import warmup_session
+
+        warmup_session()
 
     def on_start(self, _: object) -> None:
-        from .stt import warmup_local_model
-
         self.session_active = True
         set_interview_active(True)
         self._set_status("интервью")
-        warmup_local_model()
+        from .session_warmup import warmup_session
+
+        warmup_session()
         self._start_hotkey()
         tg_hint = self._start_telegram_input()
         bound = resolve_bound_chat_id()
@@ -192,6 +200,7 @@ class CopilotApp(rumps.App):
             return ""
         try:
             status = self._telegram.start()
+            logger.info("[copilot] Telegram: %s", status)
             log("[copilot] Telegram:", status)
             return status[:80]
         except TelegramInputError as e:
@@ -208,10 +217,12 @@ class CopilotApp(rumps.App):
         append_line("interviewer", text)
 
     def _on_transcript_self(self, text: str) -> None:
-        line = append_line("self", text)
+        if interview_active() and terminal_show_self_stt():
+            print_self_transcript(text)
+        append_line("self", text)
 
         def show() -> None:
-            notify("Транскрипт", "Я", line[:100])
+            notify("Транскрипт", "Я", text[:100])
 
         run_on_main(show)
 
@@ -223,17 +234,26 @@ class CopilotApp(rumps.App):
         return self._audio_interviewer.running or self._audio_self.running
 
     def _pause_audio_for_sdk(self) -> None:
-        self._resume_listening_after_sdk = self._audio_any_running()
+        """Пауза STT на время SDK; вложенные вызовы (⌘↩ + скрин) — счётчик."""
+        self._sdk_pause_depth += 1
         self._stop_all_audio()
 
     def _resume_audio_if_needed(self) -> None:
-        if not self._resume_listening_after_sdk:
+        if self._sdk_pause_depth > 0:
+            self._sdk_pause_depth -= 1
+        if self._sdk_pause_depth > 0:
             return
-        self._resume_listening_after_sdk = False
+        if not self._listening_active or not self.session_active:
+            return
         ok_lines, err_lines = self._start_listening_channels()
         if ok_lines:
             status = ok_lines[0] if len(ok_lines) == 1 else f"{len(ok_lines)} канала"
             self._set_status(f"слушаю ({status})")
+            if interview_active():
+                sys.stdout.write(
+                    "\n[copilot] STT возобновлено: " + "; ".join(ok_lines) + "\n\n"
+                )
+                sys.stdout.flush()
         elif err_lines:
             notify("STT", "Не удалось возобновить запись", err_lines[0][:120])
 
@@ -261,10 +281,18 @@ class CopilotApp(rumps.App):
                 err_lines.append(str(e))
             except Exception as e:
                 err_lines.append(f"{title}: {e}")
+        if ok_lines and interview_active():
+            sys.stdout.write(
+                "\n[copilot] слушаю: " + "; ".join(ok_lines) + "\n"
+                "[copilot] BlackHole = звук звонка (оба голоса); "
+                "«Я» = только микрофон (Brio)\n\n"
+            )
+            sys.stdout.flush()
         return ok_lines, err_lines
 
     def on_listen_start(self, _: object) -> None:
-        self._resume_listening_after_sdk = False
+        self._sdk_pause_depth = 0
+        self._listening_active = True
         ok_lines, err_lines = self._start_listening_channels()
         if not ok_lines:
             if err_lines:
@@ -287,6 +315,8 @@ class CopilotApp(rumps.App):
         notify("STT", "Прослушивание", body[:160])
 
     def on_listen_stop(self, _: object) -> None:
+        self._listening_active = False
+        self._sdk_pause_depth = 0
         self._stop_all_audio()
         if self.session_active:
             self._set_status("интервью")
@@ -298,7 +328,8 @@ class CopilotApp(rumps.App):
         if self._sdk_busy:
             cancel_active_sdk()
             self._sdk_busy = False
-        self._resume_listening_after_sdk = False
+        self._listening_active = False
+        self._sdk_pause_depth = 0
         self.session_active = False
         set_interview_active(False)
         self._stop_all_audio()
@@ -366,8 +397,8 @@ class CopilotApp(rumps.App):
 
     def _begin_vision_request(self, source: str) -> None:
         self._sdk_busy = True
-        if answer_pause_audio():
-            self._pause_audio_for_sdk()
+        # Скриншот всегда без STT — иначе Whisper на тишине даёт «редактор субтитров…»
+        self._pause_audio_for_sdk()
         prov = screenshot_provider_hint()
         self._set_status(f"скриншот ({prov})…")
         log("[copilot] screenshot solve:", source)
@@ -404,6 +435,7 @@ class CopilotApp(rumps.App):
                 if preview:
                     self._log_answer(preview)
                 self._set_status("интервью" if self.session_active else "ожидание")
+                notify_clipboard_cleared()
                 self._resume_audio_if_needed()
 
             run_on_main(done, None)
@@ -428,8 +460,9 @@ class CopilotApp(rumps.App):
             )
             if interview_active():
                 sys.stdout.write(
-                    "\n[copilot] Нет [Интервьюер] в транскрипте — "
-                    "дождись STT или добавь реплику вручную\n\n"
+                    "\n[copilot] Нет вопроса для ⌘↩ — дождись STT/Telegram "
+                    "или ⌘G и новую реплику интервьюера\n"
+                    "(микрофон мог записать только [Я] без нового вопроса)\n\n"
                 )
                 sys.stdout.flush()
             return

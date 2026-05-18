@@ -10,12 +10,14 @@ from .audio_devices import resolve_input_device
 from .audio_macos import open_input_stream_locked, probe_input_stream
 from .config import (
     audio_block_ms,
+    audio_rms_threshold,
     max_segment_seconds,
     min_speech_seconds,
     silence_seconds,
 )
 from .interview_quiet import log
 from .stt import STTError, transcribe_pcm16_mono
+from .stt_filter import is_stt_hallucination
 from .stt_worker import transcribe_async
 from .transcript import append_line
 
@@ -84,7 +86,7 @@ class AudioListener:
         silence_limit = silence_seconds()
         min_speech = min_speech_seconds()
         max_seg = max_segment_seconds()
-        rms_threshold = 0.012
+        rms_threshold = audio_rms_threshold(self._speaker)
 
         buf: list[np.ndarray] = []
         silent_blocks = 0
@@ -161,6 +163,9 @@ class AudioListener:
         on_done = self._on_transcript
 
         def deliver(text: str) -> None:
+            if is_stt_hallucination(text):
+                logger.debug("STT dropped (%s): %r", self._speaker, text[:80])
+                return
             try:
                 on_done(text)
             except Exception:

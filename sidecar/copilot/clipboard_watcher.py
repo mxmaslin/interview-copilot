@@ -72,10 +72,8 @@ class ClipboardScreenshotWatcher:
             if item is None:
                 continue
             data, _mime = item
-            fp = image_fingerprint(data)
-            if fp == self._last_fingerprint:
-                continue
-            self._last_fingerprint = fp
+            # changeCount уже новый — обрабатываем даже тот же кадр (второй ⌘⌃⇧4).
+            self._last_fingerprint = image_fingerprint(data)
             try:
                 self._on_image()
             except Exception:

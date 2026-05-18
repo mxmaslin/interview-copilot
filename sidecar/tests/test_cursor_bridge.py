@@ -12,6 +12,15 @@ def test_extract_sdk_error_from_tail() -> None:
     assert len(msg) < 900
 
 
+def test_extract_sdk_error_skips_minified_bundle() -> None:
+    bundle = "function parseJSXAttributes(){}" + "x" * 50000
+    stderr = bundle + "\nc [ConfigurationError]: Agent agent-1 not found\n"
+    msg = _extract_sdk_error(stderr, "")
+    assert "not found" in msg
+    assert "parseJSX" not in msg
+    assert len(msg) < 900
+
+
 def test_solve_screenshot_stream_removes_payload(monkeypatch) -> None:
     payload_path = DATA_DIR / "screenshot-cursor-payload.json"
     if payload_path.exists():

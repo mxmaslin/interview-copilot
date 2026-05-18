@@ -38,6 +38,21 @@ def openai_api_key() -> str | None:
     return key or None
 
 
+def screenshot_openai_base_url() -> str | None:
+    """OpenAI-compatible endpoint (ProxyAPI, OpenRouter, …) для vision-скринов."""
+    url = _env("SCREENSHOT_OPENAI_BASE_URL") or _env("OPENAI_BASE_URL")
+    return url or None
+
+
+def anthropic_api_key() -> str | None:
+    return _env("ANTHROPIC_API_KEY") or None
+
+
+def anthropic_base_url() -> str | None:
+    """Опционально: прокси с Anthropic API (если понадобится)."""
+    return _env("ANTHROPIC_BASE_URL") or None
+
+
 def audio_device_hint_interviewer() -> str:
     """Zoom/Meet/Telemost → BlackHole (или Multi-Output). Подстрока имени устройства."""
     return _env("AUDIO_INPUT_INTERVIEWER") or _env("AUDIO_INPUT_DEVICE", "BlackHole")
@@ -135,10 +150,23 @@ def whisper_cpu_threads() -> int:
 
 
 def whisper_beam_size() -> int:
-    try:
-        return int(_env("WHISPER_BEAM_SIZE", "1"))
-    except ValueError:
-        return 1
+    explicit = _env("WHISPER_BEAM_SIZE")
+    if explicit:
+        try:
+            return int(explicit)
+        except ValueError:
+            pass
+    preset = stt_latency_preset()
+    if preset == "quality":
+        return 5
+    if preset == "balanced":
+        return 3
+    return 1
+
+
+def whisper_prompt_mode() -> str:
+    """general — бытовая речь; interview — IT-термины в prompt (собес)."""
+    return _env("WHISPER_PROMPT_MODE", "interview").lower()
 
 
 def whisper_initial_prompt() -> str:
@@ -337,9 +365,33 @@ def terminal_show_interviewer_stt() -> bool:
     return _env("TERMINAL_SHOW_INTERVIEWER", "1").lower() not in ("0", "false", "no")
 
 
+def terminal_show_self_stt() -> bool:
+    """Печатать свои реплики (микрофон) в терминал — иначе только уведомление macOS."""
+    return _env("TERMINAL_SHOW_SELF", "1").lower() not in ("0", "false", "no")
+
+
+def audio_rms_threshold(speaker: str) -> float:
+    """Порог громкости для сегментации (ниже для self — тихий микрофон)."""
+    key = (
+        "AUDIO_RMS_THRESHOLD_SELF"
+        if speaker == "self"
+        else "AUDIO_RMS_THRESHOLD_INTERVIEWER"
+    )
+    default = "0.008" if speaker == "self" else "0.012"
+    try:
+        return float(_env(key) or _env("AUDIO_RMS_THRESHOLD", default))
+    except ValueError:
+        return 0.008 if speaker == "self" else 0.012
+
+
 def terminal_answer_stream() -> bool:
     """Печатать ответ ⌘↩ в терминал по чанкам (OpenAI/DeepSeek stream)."""
     return _env("TERMINAL_ANSWER_STREAM", "1").lower() not in ("0", "false", "no")
+
+
+def copilot_session_warmup_enabled() -> bool:
+    """При старте menubar copilot — фоновый прогрев STT / API / SDK."""
+    return _env("COPILOT_SESSION_WARMUP", "1").lower() not in ("0", "false", "no")
 
 
 def screenshot_solve_enabled() -> bool:
@@ -347,22 +399,89 @@ def screenshot_solve_enabled() -> bool:
     return _env("SCREENSHOT_SOLVE_ENABLED", "1").lower() not in ("0", "false", "no")
 
 
+def screenshot_latency_preset() -> str:
+    """fast (default) | balanced — задержка watcher и сжатие картинки."""
+    return _env("SCREENSHOT_LATENCY", "fast").lower()
+
+
 def screenshot_poll_sec() -> float:
-    try:
-        return float(_env("SCREENSHOT_POLL_SEC", "0.35"))
-    except ValueError:
+    explicit = _env("SCREENSHOT_POLL_SEC")
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    if screenshot_latency_preset() == "balanced":
         return 0.35
+    return 0.12
 
 
 def screenshot_debounce_sec() -> float:
     """Пауза после changeCount, пока macOS допишет PNG в буфер."""
-    raw = _env("SCREENSHOT_DEBOUNCE_SEC") or _env(
-        "SCREENSHOT_SOLVE_DEBOUNCE_SEC", "0.25"
-    )
-    try:
-        return float(raw)
-    except ValueError:
+    explicit = _env("SCREENSHOT_DEBOUNCE_SEC") or _env("SCREENSHOT_SOLVE_DEBOUNCE_SEC")
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    if screenshot_latency_preset() == "balanced":
         return 0.25
+    return 0.08
+
+
+def screenshot_max_edge_px() -> int:
+    explicit = _env("SCREENSHOT_MAX_EDGE_PX")
+    if explicit:
+        try:
+            return int(explicit)
+        except ValueError:
+            pass
+    if screenshot_latency_preset() == "balanced":
+        return 1920
+    return 1024
+
+
+def screenshot_jpeg_quality() -> float:
+    explicit = _env("SCREENSHOT_JPEG_QUALITY")
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    if screenshot_latency_preset() == "balanced":
+        return 0.85
+    return 0.78
+
+
+def screenshot_reuse_agent() -> bool:
+    """
+    Переиспользовать SDK-агента между скриншотами (resume).
+    fast: новый агент каждый раз — меньше «думает» из-за истории и tool-loop по репо.
+    """
+    explicit = _env("SCREENSHOT_REUSE_AGENT")
+    if explicit:
+        return explicit.lower() not in ("0", "false", "no")
+    for name in ("SCREENSHOT_AGENT_FRESH", "SCREENSHOT_FRESH_AGENT"):
+        fresh = _env(name)
+        if fresh:
+            return fresh.lower() not in ("1", "true", "yes")
+    return screenshot_latency_preset() != "fast"
+
+
+def screenshot_optimize_enabled() -> bool:
+    return _env("SCREENSHOT_OPTIMIZE", "1").lower() not in ("0", "false", "no")
+
+
+def screenshot_warm_agent() -> bool:
+    """При старте copilot создать/восстановить SDK-агента для скриншотов."""
+    return _env("SCREENSHOT_WARM_AGENT", "1").lower() not in ("0", "false", "no")
+
+
+def screenshot_minimal_prompt() -> bool:
+    explicit = _env("SCREENSHOT_MINIMAL_PROMPT")
+    if explicit:
+        return explicit.lower() not in ("0", "false", "no")
+    return screenshot_latency_preset() == "fast"
 
 
 def screenshot_answer_provider() -> str:
@@ -377,6 +496,8 @@ def screenshot_answer_provider() -> str:
     base = answer_provider()
     if base != "deepseek":
         return base
+    if anthropic_api_key():
+        return "anthropic"
     if cursor_api_key():
         return "cursor"
     if openai_api_key():
@@ -390,6 +511,8 @@ def screenshot_vision_model(provider: str) -> str:
         return explicit
     if provider == "openai":
         return _env("SCREENSHOT_OPENAI_MODEL", "gpt-4o-mini")
+    if provider == "anthropic":
+        return _env("SCREENSHOT_ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
     if provider == "deepseek":
         return _env("SCREENSHOT_DEEPSEEK_MODEL", "deepseek-chat")
     if provider == "cursor":

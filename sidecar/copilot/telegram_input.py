@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 import threading
 import urllib.error
 import urllib.parse
@@ -78,12 +79,23 @@ class TelegramInterviewerInput:
                 if self._stop.wait(5.0):
                     break
                 continue
-            for update_id, chat_id, text in updates:
+            for update_id, chat_id, text, voice_file_id in updates:
                 self._offset = max(self._offset, update_id + 1)
                 _save_offset(self._offset)
                 if chat_id not in allowed:
                     continue
-                text = text.strip()
+                if voice_file_id:
+                    try:
+                        text = _transcribe_voice_message(token, voice_file_id)
+                    except Exception as e:
+                        logger.warning("Telegram voice STT: %s", e)
+                        _send_message(
+                            token,
+                            chat_id,
+                            f"Не расшифровал голосовое: {e}"[:350],
+                        )
+                        continue
+                text = (text or "").strip()
                 if not text:
                     continue
                 if text.startswith("/"):
@@ -142,9 +154,11 @@ def _api_call(token: str, method: str, **params: Any) -> dict[str, Any]:
     return body.get("result")  # type: ignore[return-value]
 
 
-def parse_telegram_updates(raw: list[Any]) -> list[tuple[int, int, str]]:
-    """Разбор result из getUpdates (для тестов и poll)."""
-    out: list[tuple[int, int, str]] = []
+def parse_telegram_updates(
+    raw: list[Any],
+) -> list[tuple[int, int, str | None, str | None]]:
+    """Разбор result из getUpdates: (update_id, chat_id, text?, voice_file_id?)."""
+    out: list[tuple[int, int, str | None, str | None]] = []
     for item in raw:
         if not isinstance(item, dict):
             continue
@@ -156,15 +170,64 @@ def parse_telegram_updates(raw: list[Any]) -> list[tuple[int, int, str]]:
         if not isinstance(chat, dict):
             continue
         chat_id = int(chat.get("id", 0))
-        text = msg.get("text")
-        if isinstance(text, str):
-            out.append((uid, chat_id, text))
+        text = msg.get("text") if isinstance(msg.get("text"), str) else None
+        voice = msg.get("voice")
+        voice_id = (
+            str(voice.get("file_id"))
+            if isinstance(voice, dict) and voice.get("file_id")
+            else None
+        )
+        if text is not None or voice_id:
+            out.append((uid, chat_id, text, voice_id))
     return out
+
+
+def _download_telegram_file(token: str, file_id: str) -> bytes:
+    info = _api_call(token, "getFile", file_id=file_id)
+    if not isinstance(info, dict):
+        raise TelegramInputError("Telegram getFile: пустой ответ")
+    file_path = info.get("file_path")
+    if not isinstance(file_path, str) or not file_path:
+        raise TelegramInputError("Telegram getFile: нет file_path")
+    url = f"https://api.telegram.org/file/bot{token}/{file_path}"
+    req = urllib.request.Request(url, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", errors="replace")[:400]
+        raise TelegramInputError(f"Telegram file HTTP {e.code}: {detail}") from e
+    except urllib.error.URLError as e:
+        raise TelegramInputError(f"Telegram file: {e}") from e
+
+
+def _transcribe_voice_message(token: str, file_id: str) -> str:
+    from .stt import STTError, transcribe_audio_file
+
+    data = _download_telegram_file(token, file_id)
+    suffix = ".ogg"
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        path = tmp.name
+        tmp.write(data)
+    try:
+        text = transcribe_audio_file(path).strip()
+    except STTError as e:
+        raise TelegramInputError(str(e)) from e
+    finally:
+        try:
+            import os
+
+            os.unlink(path)
+        except OSError:
+            pass
+    if not text:
+        raise TelegramInputError("Пустая расшифровка голосового")
+    return text
 
 
 def _get_updates(
     token: str, offset: int, *, timeout: int = 25
-) -> list[tuple[int, int, str]]:
+) -> list[tuple[int, int, str | None, str | None]]:
     params: dict[str, Any] = {
         "timeout": timeout,
         "allowed_updates": json.dumps(["message"]),

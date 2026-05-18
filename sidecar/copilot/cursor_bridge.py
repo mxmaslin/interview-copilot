@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import threading
 from collections.abc import Callable
@@ -16,6 +17,8 @@ from .config import (
     REPO_ROOT,
     cursor_api_key,
 )
+from .config import screenshot_minimal_prompt, screenshot_reuse_agent
+from .cursor_model_resolve import screenshot_cursor_model_selection_json
 from .cursor_model_resolve import cursor_model_selection_json
 from .interview_quiet import log
 from .cursor_ide_chat import (
@@ -67,21 +70,43 @@ def _truncate(msg: str, max_len: int = 600) -> str:
     return msg[:max_len] + "…"
 
 
+def _is_stderr_noise(line: str) -> bool:
+    if len(line) > 400:
+        return True
+    if "keyword:" in line and "schemaType:" in line:
+        return True
+    return False
+
+
 def _extract_sdk_error(stderr: str, stdout: str) -> str:
     blob = (stderr or "") + "\n" + (stdout or "")
-    if len(blob) > 8000:
-        blob = blob[-8000:]
+    tail = blob[-12000:] if len(blob) > 12000 else blob
+    for pattern in (
+        r"ConfigurationError[^\n]{0,400}",
+        r"CursorAgentError[^\n]{0,400}",
+        r'\{"error"[^\n]{0,400}',
+    ):
+        m = re.search(pattern, tail)
+        if m:
+            return _truncate(m.group(0).strip(), 800)
     markers = (
         "ConfigurationError",
         "CursorAgentError",
         "Cannot use this model",
         "No active Cursor agent",
         '{"error"',
+        " not found",
     )
-    lines = [ln.strip() for ln in blob.splitlines() if ln.strip()]
+    lines = [
+        ln.strip()
+        for ln in tail.splitlines()
+        if ln.strip() and not _is_stderr_noise(ln.strip())
+    ]
     picked: list[str] = []
     for ln in lines:
-        if any(m in ln for m in markers) or ln.startswith("Error"):
+        if any(m in ln for m in markers) or (
+            ln.startswith("Error") and len(ln) < 200
+        ):
             picked.append(ln)
     if picked:
         return _truncate("\n".join(picked[-6:]), 800)
@@ -95,6 +120,8 @@ def _log_sdk_stderr(stderr: str) -> None:
     if not err:
         return
     for ln in err.splitlines():
+        if _is_stderr_noise(ln):
+            continue
         log("[cursor-agent]", ln)
 
 
@@ -104,11 +131,15 @@ def _cursor_sdk_env() -> dict[str, str]:
         raise CursorBridgeError(
             "CURSOR_API_KEY не задан. Скопируй .env.example → .env и укажи ключ."
         )
-    return {
+    env = {
         **os.environ,
         "CURSOR_API_KEY": key,
         "CURSOR_MODEL_JSON": cursor_model_selection_json(),
+        "SCREENSHOT_CURSOR_MODEL_JSON": screenshot_cursor_model_selection_json(),
+        "SCREENSHOT_MINIMAL_PROMPT": "1" if screenshot_minimal_prompt() else "0",
+        "SCREENSHOT_REUSE_AGENT": "1" if screenshot_reuse_agent() else "0",
     }
+    return env
 
 
 def _run_node(command: str, *extra: str, timeout: int = _TIMEOUT_START) -> dict:
@@ -276,6 +307,42 @@ def _run_node_stream(
 def answer_last_question_stream(on_delta: Callable[[str], None]) -> dict:
     """Cursor SDK answer с NDJSON delta на stdout (`agent.mjs answer`)."""
     return _run_node_stream("answer", on_delta=on_delta, timeout=_TIMEOUT_ANSWER)
+
+
+def _warm_node(
+    command: str, *, label: str, timeout: int = 90, block: bool = False
+) -> bool:
+    def _run() -> bool:
+        try:
+            _run_node(command, timeout=timeout)
+            if not block:
+                log(f"[copilot] {label}: ok")
+            return True
+        except CursorBridgeError as e:
+            short = _extract_sdk_error(str(e), "") or _truncate(str(e), 200)
+            log(f"[copilot] {label}:", short)
+            return False
+
+    if block:
+        return _run()
+    threading.Thread(target=_run, name=label, daemon=True).start()
+    return True
+
+
+def warmup_screenshot_agent() -> None:
+    """Фоном создать/проверить SDK-агента для скриншотов (быстрее первый ⌘⌃⇧4)."""
+    from .config import screenshot_answer_provider, screenshot_warm_agent
+
+    if not screenshot_warm_agent() or screenshot_answer_provider() != "cursor":
+        return
+    _warm_node("screenshot-warm", label="screenshot agent warm")
+
+
+def warmup_answer_agent(*, block: bool = False) -> bool:
+    """Resume SDK-агента для ⌘↩ без отправки сообщения."""
+    return _warm_node(
+        "answer-warm", label="cursor answer warm", timeout=90, block=block
+    )
 
 
 def solve_screenshot_stream(

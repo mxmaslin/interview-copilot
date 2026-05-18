@@ -56,18 +56,21 @@ def dialogue_lines() -> list[str]:
 
 
 def last_interviewer_question() -> str | None:
-    """Подряд идущие [Интервьюер] с конца диалога (до [Я]) — один вопрос."""
+    """Последний блок [Интервьюер] с конца: хвостовые [Я] (эхо с микрофона) пропускаем."""
     dialogue = dialogue_lines()
     if not dialogue:
         return None
+    i = len(dialogue) - 1
+    while i >= 0 and dialogue[i].startswith("[Я]:"):
+        i -= 1
+    if i < 0:
+        return None
     parts: list[str] = []
-    for line in reversed(dialogue):
-        if line.startswith("[Я]:"):
-            break
-        if line.startswith("[Интервьюер]:"):
-            text = _interviewer_text(line)
-            if text:
-                parts.append(text)
+    while i >= 0 and dialogue[i].startswith("[Интервьюер]:"):
+        text = _interviewer_text(dialogue[i])
+        if text:
+            parts.append(text)
+        i -= 1
     if not parts:
         return None
     parts.reverse()

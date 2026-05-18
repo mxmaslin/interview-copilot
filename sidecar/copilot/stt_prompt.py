@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from .config import whisper_initial_prompt
+from .config import whisper_initial_prompt, whisper_prompt_mode
 
-# Плотный список EN-терминов в латинице — Whisper использует prompt как «образец» вывода.
-_DEFAULT = (
+# Нейтральный prompt — без IT-слов; иначе Whisper «додумывает» JSON, API, GIL на бытовой речи.
+_GENERAL = (
+    "Дословная транскрипция русской разговорной речи. "
+    "Не добавляй слов, которых не было в аудио."
+)
+
+# Для реального собеса — подсказка IT-терминов латиницей.
+_INTERVIEW = (
     "Техническое интервью, русская речь, IT-термины латиницей: "
     "Python, GIL, asyncio, event loop, coroutine, generator, decorator, "
     "thread, process, memory, garbage collector, "
@@ -23,4 +29,6 @@ def interview_whisper_prompt() -> str:
     custom = whisper_initial_prompt()
     if custom:
         return custom
-    return _DEFAULT
+    if whisper_prompt_mode() in ("general", "casual", "dialog"):
+        return _GENERAL
+    return _INTERVIEW

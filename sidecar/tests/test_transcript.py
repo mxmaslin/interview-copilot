@@ -76,6 +76,17 @@ def test_clear_dialogue(tmp_path, monkeypatch) -> None:
     assert "cleared" in path.read_text(encoding="utf-8")
 
 
+def test_last_interviewer_skips_trailing_self(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+
+    transcript.append_line("interviewer", "Ну не надо.")
+    transcript.append_line("self", "Ещё раз спросите")
+
+    assert transcript.last_interviewer_line() == "Ну не надо."
+
+
 def test_last_interviewer_line_empty(tmp_path, monkeypatch) -> None:
     path = tmp_path / "transcript.md"
     monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)

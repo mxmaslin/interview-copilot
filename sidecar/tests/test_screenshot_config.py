@@ -24,16 +24,48 @@ def test_screenshot_deepseek_uses_cursor_when_key(monkeypatch) -> None:
     assert config.screenshot_answer_provider() == "cursor"
 
 
+def test_screenshot_fast_latency_defaults(monkeypatch) -> None:
+    monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.setenv("SCREENSHOT_LATENCY", "fast")
+    monkeypatch.delenv("SCREENSHOT_POLL_SEC", raising=False)
+    monkeypatch.delenv("SCREENSHOT_DEBOUNCE_SEC", raising=False)
+    assert config.screenshot_poll_sec() == 0.12
+    assert config.screenshot_debounce_sec() == 0.08
+    assert config.screenshot_max_edge_px() == 1024
+    assert config.screenshot_reuse_agent() is False
+
+
 def test_screenshot_clear_clipboard_default_on(monkeypatch) -> None:
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
     monkeypatch.delenv("SCREENSHOT_CLEAR_CLIPBOARD", raising=False)
     assert config.screenshot_clear_clipboard() is True
 
 
+def test_screenshot_openai_base_url(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.setenv("SCREENSHOT_OPENAI_BASE_URL", "https://proxy.example/v1")
+    assert config.screenshot_openai_base_url() == "https://proxy.example/v1"
+
+
 def test_screenshot_vision_model_override(monkeypatch) -> None:
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
     monkeypatch.setenv("SCREENSHOT_VISION_MODEL", "gpt-4o")
     assert config.screenshot_vision_model("openai") == "gpt-4o"
+
+
+def test_screenshot_balanced_reuses_agent(monkeypatch) -> None:
+    import copilot.cursor_model_resolve as cmr
+
+    noop = lambda: None
+    monkeypatch.setattr(config, "load_dotenv", noop)
+    monkeypatch.setattr(cmr, "load_dotenv", noop)
+    monkeypatch.setenv("SCREENSHOT_LATENCY", "balanced")
+    monkeypatch.delenv("SCREENSHOT_MAX_EDGE_PX", raising=False)
+    monkeypatch.setenv("SCREENSHOT_REUSE_AGENT", "")
+    monkeypatch.setenv("SCREENSHOT_AGENT_FRESH", "")
+    monkeypatch.setenv("SCREENSHOT_FRESH_AGENT", "")
+    assert config.screenshot_reuse_agent() is True
+    assert config.screenshot_max_edge_px() == 1920
 
 
 def test_screenshot_debounce_legacy_env(monkeypatch) -> None:
