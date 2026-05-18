@@ -71,7 +71,7 @@ class CopilotApp(rumps.App):
         super().__init__("CP", quit_button=None)
         self._lock = lock
         self.session_active = False
-        self._sdk_busy = False
+        self._answer_busy = False
         self._hotkey_listener = None
         self._clipboard_watcher: ClipboardScreenshotWatcher | None = None
         self._screenshot_queue = ScreenshotQueue(
@@ -150,6 +150,8 @@ class CopilotApp(rumps.App):
             log("[copilot] chatId из .env:", cid)
         if screenshot_solve_enabled():
             self._start_clipboard_watcher()
+        if telegram_input_enabled():
+            self._start_telegram_input()
         from .session_warmup import warmup_session
 
         warmup_session()
@@ -331,16 +333,21 @@ class CopilotApp(rumps.App):
             self._set_status("ожидание")
         notify("STT", "Остановлено", "Прослушивание выключено")
 
+    def _screenshot_active(self) -> bool:
+        return (
+            self._screenshot_queue.processing
+            or self._screenshot_queue.pending_count() > 0
+        )
+
     def on_stop(self, _: object) -> None:
-        if self._sdk_busy:
+        if self._answer_busy or self._screenshot_active():
             cancel_active_sdk()
-            self._sdk_busy = False
+        self._answer_busy = False
         self._listening_active = False
         self._sdk_pause_depth = 0
         self.session_active = False
         set_interview_active(False)
         self._stop_all_audio()
-        self._stop_telegram_input()
         self._stop_hotkey()
         append_line("interviewer", "[система] sidecar: сессия остановлена")
         self._set_status("ожидание")
@@ -363,13 +370,15 @@ class CopilotApp(rumps.App):
             notify("Транскрипт", "Добавлено", line[:80])
 
     def on_cancel_sdk(self, _: object) -> None:
-        if not self._sdk_busy:
+        if not self._answer_busy and not self._screenshot_active():
             notify("Copilot", "SDK", "Нет активного запроса.")
             return
-        if cancel_active_sdk():
-            self._sdk_busy = False
+        cancelled = cancel_active_sdk()
+        if self._answer_busy:
+            self._answer_busy = False
+        if cancelled:
             self._set_status("интервью" if self.session_active else "ожидание")
-            notify("Copilot", "Отменено", "Запрос к SDK прерван.")
+            notify("Copilot", "Отменено", "Запрос прерван.")
             self._resume_audio_if_needed()
         else:
             notify("Copilot", "SDK", "Запрос уже завершился.")
@@ -430,14 +439,12 @@ class CopilotApp(rumps.App):
     def _on_screenshot_busy_change(self, busy: bool) -> None:
         def apply() -> None:
             if busy:
-                if not self._sdk_busy:
-                    self._pause_audio_for_sdk()
-                self._sdk_busy = True
+                self._pause_audio_for_sdk()
                 prov = screenshot_provider_hint()
                 self._set_status(f"скриншот ({prov})…")
             else:
-                self._sdk_busy = False
-                self._set_status("интервью" if self.session_active else "ожидание")
+                if not self._answer_busy:
+                    self._set_status("интервью" if self.session_active else "ожидание")
                 self._resume_audio_if_needed()
 
         run_on_main(apply, None)
@@ -454,8 +461,8 @@ class CopilotApp(rumps.App):
             notify("Copilot", "Транскрипт", "Реплики интервьюера и твои удалены")
 
     def on_answer(self, _: object) -> None:
-        if self._sdk_busy:
-            notify("Copilot", "Подожди", "Уже идёт запрос к SDK (⌘↩ или «Отменить SDK»).")
+        if self._answer_busy:
+            notify("Copilot", "Подожди", "Уже идёт ответ (⌘↩). Скриншоты не мешают.")
             return
         if not last_interviewer_line():
             notify(
@@ -471,7 +478,7 @@ class CopilotApp(rumps.App):
                 )
                 sys.stdout.flush()
             return
-        self._sdk_busy = True
+        self._answer_busy = True
         if answer_pause_audio():
             self._pause_audio_for_sdk()
         provider = answer_provider()
@@ -480,7 +487,11 @@ class CopilotApp(rumps.App):
             "deepseek": "DeepSeek",
             "cursor": "Cursor",
         }.get(provider, provider)
-        self._set_status(f"генерация ({label})…")
+        if self._screenshot_active():
+            self._set_status(f"генерация ({label}) + скрин…")
+            log("[copilot] answer: parallel with screenshot queue")
+        else:
+            self._set_status(f"генерация ({label})…")
         log("[copilot] answer: provider=", provider)
         threading.Thread(target=self._answer_worker, daemon=True).start()
 
@@ -498,7 +509,7 @@ class CopilotApp(rumps.App):
             preview = text[:500] + ("…" if len(text) > 500 else "")
 
             def on_ok() -> None:
-                self._sdk_busy = False
+                self._answer_busy = False
                 self._log_answer(preview)
                 if result.get("cursor_agent_error") and not result.get(
                     "cursor_agent_pushed"
@@ -511,7 +522,7 @@ class CopilotApp(rumps.App):
         except (CursorBridgeError, AnswerProviderError, Exception) as e:
 
             def on_err() -> None:
-                self._sdk_busy = False
+                self._answer_busy = False
                 rumps.alert("Ошибка ответа", str(e))
                 self._set_status("интервью" if self.session_active else "ожидание")
                 self._resume_audio_if_needed()
@@ -567,7 +578,7 @@ class CopilotApp(rumps.App):
             cancel_active_sdk()
         except Exception:
             pass
-        self._sdk_busy = False
+        self._answer_busy = False
         self._stop_all_audio()
         self._stop_telegram_input()
         self._stop_hotkey()

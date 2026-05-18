@@ -145,13 +145,14 @@ pip install -e "./sidecar[dev,openai]"
 pytest sidecar/tests -q
 ```
 
-Покрыто: config, transcript, STT, Telegram, streaming answers, screenshot (очередь, provider fallback, clipboard), cursor model resolve, audio (~100 тестов). **Нет** e2e: реальные API, микрофон, `cursor agent` UI.
+Покрыто: config, transcript, STT, Telegram, streaming answers, screenshot (очередь, параллельность с ⌘↩, provider fallback, clipboard), cursor model resolve, audio (~105 тестов). **Нет** e2e: реальные API, микрофон, `cursor agent` UI.
 
 ## Аудио (Zoom / Telemost / Meet)
 
 Настройка BlackHole: **[docs/audio-setup.md](docs/audio-setup.md)**.  
 Вопросы текстом из Telegram: **[docs/telegram-input.md](docs/telegram-input.md)**.  
-Скриншот задачи: **[docs/screenshot-solve.md](docs/screenshot-solve.md)** (`⌘⌃⇧4`).
+Скриншот задачи: **[docs/screenshot-solve.md](docs/screenshot-solve.md)** (`⌘⌃⇧4`).  
+**Параллельно:** Telegram/⌘↩ (DeepSeek) и очередь скринов (Cursor) не блокируют друг друга — см. [docs/telegram-input.md](docs/telegram-input.md).
 
 **STT по умолчанию — локальный Whisper** (`faster-whisper`, без ключей). Подходит для Mac M4 + 24 GB, модель `small`:
 

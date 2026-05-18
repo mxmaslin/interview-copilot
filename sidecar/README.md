@@ -1,6 +1,6 @@
 # Copilot sidecar
 
-macOS menubar: STT (`STT_LATENCY=fast`, Whisper `small`), опционально **Telegram-бот** (текст), `data/transcript.md`. Hotkeys: `⌘↩`, `⌘G`, **`⌘⌃⇧4`** (скриншот → vision). При `ANSWER_PROVIDER=deepseek` скриншоты → **Cursor SDK**, если задан `CURSOR_API_KEY`. Зависший процесс: `../scripts/kill-sidecar.sh`.
+macOS menubar: STT, **Telegram-бот** (polling с запуска `copilot`), `data/transcript.md`. Hotkeys: `⌘↩`, `⌘G`, **`⌘⌃⇧4`** (очередь скринов). **⌘↩** и скрины параллельно при `ANSWER_PROVIDER=deepseek` + `SCREENSHOT_ANSWER_PROVIDER=cursor`. Зависший процесс: `../scripts/kill-sidecar.sh`.
 
 Доки: `../docs/audio-setup.md`, `../docs/telegram-input.md`, `../docs/screenshot-solve.md`.
 
