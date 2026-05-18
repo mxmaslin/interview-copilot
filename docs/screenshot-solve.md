@@ -1,6 +1,6 @@
 # Скриншот → решение задачи (vision)
 
-После **⌘⌃⇧4** (выделение → **в буфер**) Copilot отправляет картинку в vision API и печатает решение в терминал (текст или код). После успешного ответа буфер **очищается** (`SCREENSHOT_CLEAR_CLIPBOARD=1`).
+После **⌘⌃⇧4** (выделение → **в буфер**) Copilot захватывает кадр в **очередь**, отправляет в vision API и печатает решение в терминал. При `SCREENSHOT_CLEAR_CLIPBOARD=1` буфер очищается **сразу после захвата** (PNG уже в памяти очереди).
 
 ## Провайдеры
 
@@ -39,12 +39,12 @@ CURSOR_MODEL=auto               # ~/.cursor/cli-config.json → selectedModel
 
 ## Как пользоваться
 
-1. `copilot` в терминале, `SCREENSHOT_SOLVE_ENABLED=1`.
-2. **⌘⌃⇧4** → ответ в терминале (~debounce). **Второй скрин** во время первого: в логе «ждём SDK» → после ответа **«обрабатываем отложенный кадр»**; буфер **не очищается**, если за время SDK уже лежит новый кадр.
-3. На время скрина STT **пауза**; после ответа — **STT возобновлено** (нужно было **Начать прослушивание**).
+1. `copilot` в терминале, `SCREENSHOT_SOLVE_ENABLED=1` (в логе: `очередь скриншотов: worker запущен`).
+2. **⌘⌃⇧4** → кадр в очередь → ответ в терминале по мере готовности. **Несколько скринов подряд** — в логе `скриншот #N в очереди (ожидают: …)`, обработка строго по одному.
+3. На время обработки очереди STT **пауза**; когда очередь пуста — **STT возобновлено** (если было **Начать прослушивание**).
 4. Файлы: `data/last-screenshot-answer.md`, при `SCREENSHOT_SOLVE_ALSO_LAST_ANSWER=1` — ещё `data/last-answer.md`.
 
-Блок «Я / редактор субтитров» в терминале при скрине — это **не** vision, а мусор STT с микрофона; сейчас отфильтровано + STT глушится на скрин.
+**Формат ответа:** код/вариант + 1–3 предложения пояснения. **Без** секции «Теория» и без блока «определение → пример → оговорки» (это только для ⌘↩ по транскрипту).
 
 Ручной запуск: **CP → Решить скриншот из буфера (⌘⌃⇧4)**.
 
@@ -54,8 +54,9 @@ CURSOR_MODEL=auto               # ~/.cursor/cli-config.json → selectedModel
 |------------|--------------|----------|
 | `SCREENSHOT_SOLVE_ENABLED` | `1` | Watcher буфера |
 | `SCREENSHOT_ANSWER_PROVIDER` | см. таблицу выше | Переопределить провайдер vision |
-| `SCREENSHOT_CLEAR_CLIPBOARD` | `1` | Очистить буфер после ответа |
-| `SCREENSHOT_DEBOUNCE_SEC` | `0.35` | Пауза после смены pasteboard |
+| `SCREENSHOT_CLEAR_CLIPBOARD` | `1` | Очистить буфер после захвата в очередь |
+| `SCREENSHOT_REUSE_AGENT` | `1` | Один Cursor SDK-агент на все скрины сессии |
+| `SCREENSHOT_DEBOUNCE_SEC` | `0.08` (fast) / `0.25` (balanced) | Пауза после смены pasteboard |
 | `SCREENSHOT_SOLVE_ALSO_LAST_ANSWER` | `1` | Дублировать в `last-answer.md` |
 | `CURSOR_MODEL` | `composer-2` | Для cursor-скринов: `auto` → cli-config |
 
@@ -70,20 +71,29 @@ SCREENSHOT_SOLVE_ENABLED=1
 # SCREENSHOT_ANSWER_PROVIDER=cursor   # опционально, явно
 ```
 
+## Очередь и один агент
+
+Несколько ⌘⌃⇧4 подряд **не теряются**:
+
+1. Watcher видит новый кадр в буфере → `enqueue_clipboard()` **сразу** читает PNG в память.
+2. Очередь обрабатывает кадры **по одному**; ответы выходят по мере готовности.
+3. Буфер можно очистить сразу после захвата (`SCREENSHOT_CLEAR_CLIPBOARD=1`) — следующий скрин не затирает предыдущий.
+
+**Один Cursor SDK-агент** на все скриншоты сессии (`SCREENSHOT_REUSE_AGENT=1` по умолчанию): `resume` из `data/screenshot-agent-state.json`, без `dispose` после каждого кадра. Отключить: `SCREENSHOT_REUSE_AGENT=0` (медленнее, но «чистый» агент каждый раз).
+
 ## Скорость (без смены модели)
 
 По умолчанию `SCREENSHOT_LATENCY=fast`:
 
 - watcher: poll **0.12 с**, debounce **0.08 с**;
 - сжатие до **1024px** + JPEG q≈0.78 (`SCREENSHOT_OPTIMIZE=1`);
-- **новый SDK-агент на каждый скрин** (`SCREENSHOT_REUSE_AGENT=0`) — без накопленной истории и без tool-loop по репо `_copilot`;
 - агент в **пустом temp cwd** (не видит файлы проекта);
 - промпт: «только картинка, без инструментов»;
 - **прогрев** при старте (`SCREENSHOT_WARM_AGENT=1`).
 
 При `solve-screenshot`: `local.force: true`; при `already has active run` — сброс `screenshot-agent-state.json` и повтор.
 
-Точнее / с переиспользованием агента: `SCREENSHOT_LATENCY=balanced` (debounce 0.25 с, 1920px, `SCREENSHOT_REUSE_AGENT=1`).
+Точнее: `SCREENSHOT_LATENCY=balanced` (debounce 0.25 с, 1920px).
 
 Отдельная модель только для скринов (не трогая ⌘↩):
 
@@ -114,6 +124,6 @@ SCREENSHOT_WARM_AGENT=0
 
 ## Ограничения
 
-- Скриншот через Cursor — отдельный ephemeral SDK-агент (не нужен `agent.mjs start` для интервью).
+- Скриншот через Cursor — отдельный SDK-агент для vision (`data/screenshot-agent-state.json`), не тот же, что `agent.mjs start` для ⌘↩.
 - Copilot **не перехватывает** ⌘⌃⇧4 — только читает буфер после macOS.
 - Accessibility для скриншотов **не нужен**; для ⌘↩ / ⌘G (pynput) — нужен.

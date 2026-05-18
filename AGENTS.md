@@ -30,7 +30,7 @@
 
 Ключи: `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`; `CURSOR_API_KEY` — для `cursor` и для **скриншотов** (в т.ч. auto-fallback при `ANSWER_PROVIDER=deepseek`).
 
-Скриншоты (`docs/screenshot-solve.md`): `deepseek-chat` **без vision** → при `CURSOR_API_KEY` скрин идёт в Cursor SDK; `CURSOR_MODEL=auto` читает `~/.cursor/cli-config.json`.
+Скриншоты (`docs/screenshot-solve.md`): `deepseek-chat` **без vision** → при `CURSOR_API_KEY` скрин идёт в Cursor SDK; `CURSOR_MODEL=auto` читает `~/.cursor/cli-config.json`. Очередь кадров (несколько ⌘⌃⇧4 подряд), один SDK-агент (`SCREENSHOT_REUSE_AGENT=1`). Ответ по скрину — **без** секции «Теория».
 
 Полезные флаги:
 
@@ -54,7 +54,7 @@
 
 На **⌘↩** — последний блок `[Интервьюер]` с конца (хвостовые `[Я]` после реплики собеседника **не** блокируют вопрос). STT: `STT_LATENCY`, `WHISPER_PROMPT_MODE=interview|general`. Ответ: терминал (stream) + `data/last-answer.md`.
 
-**STT и скриншот:** скрин **⌘⌃⇧4** глушит микрофон на время vision; после ответа STT снова включается, если было **Начать прослушивание**. **⌘↩** с `deepseek` STT не глушит. См. `docs/audio-setup.md`.
+**STT и скриншот:** скрин **⌘⌃⇧4** глушит микрофон, пока очередь скриншотов не пуста; затем STT снова включается, если было **Начать прослушивание**. **⌘↩** с `deepseek` STT не глушит. См. `docs/audio-setup.md`.
 
 ## Разработка проекта copilot
 

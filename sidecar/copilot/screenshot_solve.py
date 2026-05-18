@@ -39,14 +39,16 @@ SCREENSHOT_LABEL = "[Задача со скриншота]"
 SCREENSHOT_SYSTEM = (
     "Ты решаешь задачу с изображения (скриншот экрана). "
     "Ответ на русском, EN-термины где уместно. "
-    "Если на картинке задача на код — дай готовое решение (код + краткое пояснение). "
-    "Если теория — структура: определение → пример → оговорки. "
-    "Без воды, сразу к решению."
+    "Код — готовое решение и 1–3 предложения пояснения. "
+    "Вопрос с вариантами — правильный вариант и кратко почему. "
+    "Без секции «Теория», без блоков «определение → пример → оговорки» — только решение. "
+    "Без воды."
 )
 
 USER_TEXT = (
     "Реши задачу на изображении. "
-    "Если это вопрос с вариантами — укажи правильный ответ и почему."
+    "Если вопрос с вариантами — правильный ответ и кратко почему. "
+    "Не добавляй секцию «Теория»."
 )
 
 
@@ -187,6 +189,7 @@ def solve_screenshot_png(
     *,
     mime: str = "image/png",
     paste_count_at_read: int | None = None,
+    clipboard_cleared_at_capture: bool = False,
 ) -> dict[str, Any]:
     """Отправить изображение (из буфера ⌘⌃⇧4) в vision-модель."""
     if not png_bytes:
@@ -327,14 +330,17 @@ def solve_screenshot_png(
             SCREENSHOT_LABEL, text, provider=provider, model=model
         )
     log("[copilot] screenshot answer:", shot_path)
-    count_at_read = (
-        paste_count_at_read
-        if paste_count_at_read is not None
-        else pasteboard_change_count()
-    )
-    clipboard_cleared, clipboard_deferred = _maybe_clear_clipboard_after_screenshot(
-        count_at_read
-    )
+    clipboard_cleared = False
+    clipboard_deferred = False
+    if not clipboard_cleared_at_capture:
+        count_at_read = (
+            paste_count_at_read
+            if paste_count_at_read is not None
+            else pasteboard_change_count()
+        )
+        clipboard_cleared, clipboard_deferred = (
+            _maybe_clear_clipboard_after_screenshot(count_at_read)
+        )
     return {
         "status": "finished",
         "text": text,

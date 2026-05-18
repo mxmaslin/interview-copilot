@@ -28,11 +28,13 @@ from .config import (
     terminal_show_interviewer_stt,
     terminal_show_self_stt,
 )
-from .answer_provider import AnswerProviderError, dispatch_answer
-from .clipboard_watcher import ClipboardScreenshotWatcher, notify_clipboard_cleared
+from .answer_provider import dispatch_answer
+from .clipboard_watcher import ClipboardScreenshotWatcher
+from .screenshot_queue import ScreenshotJob, ScreenshotQueue
 from .screenshot_solve import (
+    AnswerProviderError,
     screenshot_provider_hint,
-    solve_screenshot_from_clipboard,
+    solve_screenshot_png,
 )
 from .terminal_display import print_interview_answer
 from .cursor_bridge import (
@@ -72,6 +74,11 @@ class CopilotApp(rumps.App):
         self._sdk_busy = False
         self._hotkey_listener = None
         self._clipboard_watcher: ClipboardScreenshotWatcher | None = None
+        self._screenshot_queue = ScreenshotQueue(
+            process=self._process_screenshot_job,
+            on_busy_change=self._on_screenshot_busy_change,
+            on_status=self._set_status_from_queue,
+        )
         self._listening_active = False
         self._sdk_pause_depth = 0
         self._audio_interviewer = AudioListener(
@@ -371,9 +378,9 @@ class CopilotApp(rumps.App):
         self._stop_clipboard_watcher()
         if not screenshot_solve_enabled():
             return
+        self._screenshot_queue.start()
         watcher = ClipboardScreenshotWatcher(
-            on_image=lambda: run_on_main(self._on_screenshot_clipboard, None),
-            can_process=lambda: not self._sdk_busy,
+            on_image=lambda: run_on_main(self._enqueue_screenshot, None),
         )
         watcher.start()
         self._clipboard_watcher = watcher
@@ -384,68 +391,59 @@ class CopilotApp(rumps.App):
         if watcher is not None:
             watcher.stop()
 
-    def _on_screenshot_clipboard(self, _: object) -> None:
-        if self._sdk_busy:
-            return
-        self._begin_vision_request("буфер")
+    def _stop_screenshot_pipeline(self) -> None:
+        self._stop_clipboard_watcher()
+        self._screenshot_queue.stop()
+
+    def _enqueue_screenshot(self, _: object = None) -> None:
+        if not self._screenshot_queue.enqueue_clipboard():
+            notify("Copilot", "Скриншот", "В буфере нет изображения (⌘⌃⇧4).")
 
     def on_screenshot_solve(self, _: object) -> None:
-        if self._sdk_busy:
-            notify("Copilot", "Подожди", "Уже идёт запрос.")
-            return
-        self._begin_vision_request("меню")
+        self._enqueue_screenshot()
 
-    def _begin_vision_request(self, source: str) -> None:
-        self._sdk_busy = True
-        # Скриншот всегда без STT — иначе Whisper на тишине даёт «редактор субтитров…»
-        self._pause_audio_for_sdk()
+    def _process_screenshot_job(self, job: ScreenshotJob) -> dict:
         prov = screenshot_provider_hint()
-        self._set_status(f"скриншот ({prov})…")
-        log("[copilot] screenshot solve:", source)
-        threading.Thread(target=self._screenshot_worker, daemon=True).start()
-
-    def _screenshot_worker(self) -> None:
-        preview = ""
-        deferred_clipboard = False
+        log(f"[copilot] screenshot #{job.job_id}: provider={prov}")
         try:
-            result = solve_screenshot_from_clipboard()
-            text = (result.get("text") or "").strip()
-            preview = text[:500] + ("…" if len(text) > 500 else "")
-            deferred_clipboard = bool(result.get("clipboard_deferred"))
+            result = solve_screenshot_png(
+                job.png_bytes,
+                mime=job.mime,
+                clipboard_cleared_at_capture=True,
+            )
         except AnswerProviderError as e:
-            log("[copilot] screenshot ERROR:", e)
+            log(f"[copilot] screenshot #{job.job_id} ERROR:", e)
             run_on_main(
                 lambda: notify("Copilot", "Скриншот", str(e)[:160]),
                 None,
             )
             if interview_active():
-                sys.stdout.write(f"\n[copilot] скриншот: {e}\n\n")
+                sys.stdout.write(f"\n[copilot] скриншот #{job.job_id}: {e}\n\n")
                 sys.stdout.flush()
-        except Exception as e:
-            log("[copilot] screenshot ERROR:", e)
-            import traceback
+            raise
+        text = (result.get("text") or "").strip()
+        if text:
+            preview = text[:500] + ("…" if len(text) > 500 else "")
+            run_on_main(lambda: self._log_answer(preview), None)
+        return result
 
-            traceback.print_exc()
-            run_on_main(
-                lambda: notify("Copilot", "Скриншот", str(e)[:120]),
-                None,
-            )
-        finally:
-
-            def done() -> None:
+    def _on_screenshot_busy_change(self, busy: bool) -> None:
+        def apply() -> None:
+            if busy:
+                if not self._sdk_busy:
+                    self._pause_audio_for_sdk()
+                self._sdk_busy = True
+                prov = screenshot_provider_hint()
+                self._set_status(f"скриншот ({prov})…")
+            else:
                 self._sdk_busy = False
-                if preview:
-                    self._log_answer(preview)
                 self._set_status("интервью" if self.session_active else "ожидание")
                 self._resume_audio_if_needed()
-                watcher = self._clipboard_watcher
-                if watcher is not None and deferred_clipboard:
-                    watcher.kick_pending(
-                        lambda: self._begin_vision_request("буфер-отложенный"),
-                        force=True,
-                    )
 
-            run_on_main(done, None)
+        run_on_main(apply, None)
+
+    def _set_status_from_queue(self, text: str) -> None:
+        run_on_main(lambda: self._set_status(text), None)
 
     def on_clear_transcript(self, _: object) -> None:
         clear_dialogue()
@@ -573,7 +571,7 @@ class CopilotApp(rumps.App):
         self._stop_all_audio()
         self._stop_telegram_input()
         self._stop_hotkey()
-        self._stop_clipboard_watcher()
+        self._stop_screenshot_pipeline()
         shutdown_resources()
         self._lock.release()
         rumps.quit_application()

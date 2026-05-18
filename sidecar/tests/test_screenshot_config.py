@@ -29,10 +29,13 @@ def test_screenshot_fast_latency_defaults(monkeypatch) -> None:
     monkeypatch.setenv("SCREENSHOT_LATENCY", "fast")
     monkeypatch.delenv("SCREENSHOT_POLL_SEC", raising=False)
     monkeypatch.delenv("SCREENSHOT_DEBOUNCE_SEC", raising=False)
+    monkeypatch.delenv("SCREENSHOT_REUSE_AGENT", raising=False)
+    monkeypatch.delenv("SCREENSHOT_AGENT_FRESH", raising=False)
+    monkeypatch.delenv("SCREENSHOT_FRESH_AGENT", raising=False)
     assert config.screenshot_poll_sec() == 0.12
     assert config.screenshot_debounce_sec() == 0.08
     assert config.screenshot_max_edge_px() == 1024
-    assert config.screenshot_reuse_agent() is False
+    assert config.screenshot_reuse_agent() is True
 
 
 def test_screenshot_clear_clipboard_default_on(monkeypatch) -> None:

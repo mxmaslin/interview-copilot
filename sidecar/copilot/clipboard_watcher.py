@@ -4,7 +4,7 @@ import threading
 import time
 from collections.abc import Callable
 
-from .clipboard_image import image_fingerprint, pasteboard_change_count, read_clipboard_image
+from .clipboard_image import pasteboard_change_count, read_clipboard_image
 from .config import screenshot_debounce_sec, screenshot_poll_sec
 from .interview_quiet import log
 
@@ -24,19 +24,11 @@ def notify_clipboard_cleared() -> None:
 class ClipboardScreenshotWatcher:
     """Следит за changeCount pasteboard; при новом изображении вызывает on_image."""
 
-    def __init__(
-        self,
-        on_image: Callable[[], None],
-        *,
-        can_process: Callable[[], bool] | None = None,
-    ) -> None:
+    def __init__(self, on_image: Callable[[], None]) -> None:
         self._on_image = on_image
-        self._can_process = can_process or (lambda: True)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_count = 0
-        self._last_fingerprint = ""
-        self._busy_skip_logged = False
 
     def start(self) -> None:
         self.stop()
@@ -47,7 +39,7 @@ class ClipboardScreenshotWatcher:
         )
         self._thread.start()
         register_clipboard_watcher(self)
-        log("[copilot] screenshot watcher: ⌘⌃⇧4 → буфер → vision API")
+        log("[copilot] screenshot watcher: ⌘⌃⇧4 → очередь vision")
 
     def stop(self) -> None:
         register_clipboard_watcher(None)
@@ -78,18 +70,7 @@ class ClipboardScreenshotWatcher:
             if item is None:
                 self._last_count = count
                 continue
-            if not self._can_process():
-                if not self._busy_skip_logged:
-                    log(
-                        "[copilot] скриншот в буфере — ждём завершения текущего SDK, "
-                        "обработаем автоматически"
-                    )
-                    self._busy_skip_logged = True
-                continue
             self._last_count = count
-            self._busy_skip_logged = False
-            data, _mime = item
-            self._last_fingerprint = image_fingerprint(data)
             try:
                 self._on_image()
             except Exception:
@@ -97,40 +78,9 @@ class ClipboardScreenshotWatcher:
 
                 traceback.print_exc()
 
-    def kick_pending(
-        self,
-        start: Callable[[], None] | None = None,
-        *,
-        force: bool = False,
-    ) -> None:
-        """После освобождения SDK — обработать скрин, оставшийся в буфере."""
-        if not self._can_process():
-            return
-        try:
-            item = read_clipboard_image()
-        except Exception as e:
-            log("[copilot] clipboard kick:", e)
-            return
-        if item is None:
-            return
-        data, _mime = item
-        fp = image_fingerprint(data)
-        try:
-            count = pasteboard_change_count()
-        except Exception:
-            count = self._last_count
-        if not force and count == self._last_count and fp == self._last_fingerprint:
-            return
-        self._last_count = count
-        self._last_fingerprint = fp
-        self._busy_skip_logged = False
-        log("[copilot] скриншот: обрабатываем отложенный кадр из буфера")
-        (start or self._on_image)()
-
     def note_pasteboard_cleared(self) -> None:
         """После clearContents — синхронизировать changeCount."""
         try:
             self._last_count = pasteboard_change_count()
         except Exception:
             pass
-        self._last_fingerprint = ""

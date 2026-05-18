@@ -455,17 +455,17 @@ def screenshot_jpeg_quality() -> float:
 
 def screenshot_reuse_agent() -> bool:
     """
-    Переиспользовать SDK-агента между скриншотами (resume).
-    fast: новый агент каждый раз — меньше «думает» из-за истории и tool-loop по репо.
+    Один SDK-агент на все скриншоты (resume между вызовами solve-screenshot).
+    SCREENSHOT_REUSE_AGENT=0 — новый агент на каждый кадр (медленнее).
     """
     explicit = _env("SCREENSHOT_REUSE_AGENT")
     if explicit:
         return explicit.lower() not in ("0", "false", "no")
     for name in ("SCREENSHOT_AGENT_FRESH", "SCREENSHOT_FRESH_AGENT"):
         fresh = _env(name)
-        if fresh:
-            return fresh.lower() not in ("1", "true", "yes")
-    return screenshot_latency_preset() != "fast"
+        if fresh and fresh.lower() in ("1", "true", "yes"):
+            return False
+    return True
 
 
 def screenshot_optimize_enabled() -> bool:
