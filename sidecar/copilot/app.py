@@ -372,7 +372,8 @@ class CopilotApp(rumps.App):
         if not screenshot_solve_enabled():
             return
         watcher = ClipboardScreenshotWatcher(
-            on_image=lambda: run_on_main(self._on_screenshot_clipboard, None)
+            on_image=lambda: run_on_main(self._on_screenshot_clipboard, None),
+            can_process=lambda: not self._sdk_busy,
         )
         watcher.start()
         self._clipboard_watcher = watcher
@@ -385,7 +386,6 @@ class CopilotApp(rumps.App):
 
     def _on_screenshot_clipboard(self, _: object) -> None:
         if self._sdk_busy:
-            notify("Copilot", "Подожди", "Уже идёт запрос (ответ или скриншот).")
             return
         self._begin_vision_request("буфер")
 
@@ -435,7 +435,6 @@ class CopilotApp(rumps.App):
                 if preview:
                     self._log_answer(preview)
                 self._set_status("интервью" if self.session_active else "ожидание")
-                notify_clipboard_cleared()
                 self._resume_audio_if_needed()
 
             run_on_main(done, None)

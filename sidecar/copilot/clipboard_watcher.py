@@ -24,12 +24,19 @@ def notify_clipboard_cleared() -> None:
 class ClipboardScreenshotWatcher:
     """Следит за changeCount pasteboard; при новом изображении вызывает on_image."""
 
-    def __init__(self, on_image: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        on_image: Callable[[], None],
+        *,
+        can_process: Callable[[], bool] | None = None,
+    ) -> None:
         self._on_image = on_image
+        self._can_process = can_process or (lambda: True)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._last_count = 0
         self._last_fingerprint = ""
+        self._busy_skip_logged = False
 
     def start(self) -> None:
         self.stop()
@@ -60,7 +67,6 @@ class ClipboardScreenshotWatcher:
                 continue
             if count == self._last_count:
                 continue
-            self._last_count = count
             if debounce > 0:
                 if self._stop.wait(debounce):
                     break
@@ -70,9 +76,19 @@ class ClipboardScreenshotWatcher:
                 log("[copilot] clipboard read:", e)
                 continue
             if item is None:
+                self._last_count = count
                 continue
+            if not self._can_process():
+                if not self._busy_skip_logged:
+                    log(
+                        "[copilot] скриншот в буфере — ждём завершения текущего SDK, "
+                        "обработаем автоматически"
+                    )
+                    self._busy_skip_logged = True
+                continue
+            self._last_count = count
+            self._busy_skip_logged = False
             data, _mime = item
-            # changeCount уже новый — обрабатываем даже тот же кадр (второй ⌘⌃⇧4).
             self._last_fingerprint = image_fingerprint(data)
             try:
                 self._on_image()
