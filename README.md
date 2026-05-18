@@ -97,6 +97,13 @@ hash -r && which copilot
 
 Если hotkey не работает — используй пункт меню **«Ответ на последний вопрос»**.
 
+### Завис CP / серое меню / Ctrl+C не выходит
+
+1. **CP → Выход** (если кликается) или из **другого** терминала: `./scripts/kill-sidecar.sh`
+2. В зависшем терминале ещё раз **Ctrl+C** или закрой вкладку.
+3. Скрытое окно «Нет вопроса» иногда оставляет меню серым — проверь окна за Cursor.
+4. Зависание на **⌘↩** — сеть/API; таймаут `ANSWER_REQUEST_TIMEOUT=120` в `.env`.
+
 ## Без SDK (только транскрипт)
 
 1. **CP → Добавить реплику интервьюера…**
@@ -136,11 +143,12 @@ pip install -e "./sidecar[dev,openai]"
 pytest sidecar/tests -q
 ```
 
-Покрыто: config, transcript (в т.ч. clear/merge), STT latency, streaming answers, audio, terminal_display, answer_delivery, cursor_bridge (46+ тестов). **Нет** e2e: DeepSeek, микрофон, `cursor agent`.
+Покрыто: config, transcript, STT latency, Telegram input, streaming answers, audio, terminal_display, answer_delivery, cursor_bridge (51+ тестов). **Нет** e2e: DeepSeek, микрофон, `cursor agent`.
 
 ## Аудио (Zoom / Telemost / Meet)
 
-Настройка BlackHole: **[docs/audio-setup.md](docs/audio-setup.md)**.
+Настройка BlackHole: **[docs/audio-setup.md](docs/audio-setup.md)**.  
+Вопросы текстом из Telegram: **[docs/telegram-input.md](docs/telegram-input.md)**.
 
 **STT по умолчанию — локальный Whisper** (`faster-whisper`, без ключей). Подходит для Mac M4 + 24 GB, модель `small`:
 

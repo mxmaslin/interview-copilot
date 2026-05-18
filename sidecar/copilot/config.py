@@ -56,6 +56,30 @@ def audio_listen_self() -> bool:
     return _env("AUDIO_ENABLE_SELF", "1").lower() not in ("0", "false", "no")
 
 
+def telegram_input_enabled() -> bool:
+    return _env("TELEGRAM_INPUT_ENABLED", "0").lower() not in ("0", "false", "no")
+
+
+def telegram_bot_token() -> str | None:
+    key = _env("TELEGRAM_BOT_TOKEN")
+    return key or None
+
+
+def telegram_allowed_chat_ids() -> set[int]:
+    """Список chat_id через запятую (личный чат с @userinfobot)."""
+    raw = _env("TELEGRAM_CHAT_IDS") or _env("TELEGRAM_CHAT_ID")
+    ids: set[int] = set()
+    for part in raw.replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.add(int(part))
+        except ValueError:
+            continue
+    return ids
+
+
 def audio_device_hint() -> str:
     """Устаревшее имя — интервьюер."""
     return audio_device_hint_interviewer()
@@ -249,6 +273,14 @@ def answer_max_tokens() -> int:
         return int(_env("ANSWER_MAX_TOKENS") or _env("OPENAI_ANSWER_MAX_TOKENS", "450"))
     except ValueError:
         return 450
+
+
+def answer_request_timeout() -> float:
+    """Секунды на запрос DeepSeek/OpenAI (зависший запрос не блокирует меню навсегда)."""
+    try:
+        return float(_env("ANSWER_REQUEST_TIMEOUT", "120"))
+    except ValueError:
+        return 120.0
 
 
 def cursor_agent_chat_id_env() -> str | None:

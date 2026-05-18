@@ -9,6 +9,7 @@ from .config import (
     answer_minimal_context,
     answer_openai_model,
     answer_provider,
+    answer_request_timeout,
     cursor_agent_mirror,
     cursor_model,
     cursor_open_answer_file,
@@ -50,10 +51,11 @@ def _openai_client(*, api_key: str, base_url: str | None):
     except ImportError as e:
         raise AnswerProviderError("pip install -e 'sidecar/[openai]'") from e
 
-    cache_key = (api_key, base_url or "")
+    timeout = answer_request_timeout()
+    cache_key = (api_key, base_url or "", timeout)
     client = _openai_clients.get(cache_key)
     if client is None:
-        kwargs: dict[str, Any] = {"api_key": api_key}
+        kwargs: dict[str, Any] = {"api_key": api_key, "timeout": timeout}
         if base_url:
             kwargs["base_url"] = base_url
         client = OpenAI(**kwargs)

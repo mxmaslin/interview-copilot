@@ -1,8 +1,10 @@
 # Copilot sidecar
 
-macOS menubar: STT (`STT_LATENCY=fast`, Whisper `small`), `data/transcript.md`. Hotkeys (после «Начать интервью»): `⌘↩` ответ, `⌘G` очистка транскрипта. Подряд `[Интервьюер]` без `[Я]` = один вопрос. Ответ в **терминале по чанкам** (`TERMINAL_ANSWER_STREAM`).
+macOS menubar: STT (`STT_LATENCY=fast`, Whisper `small`), опционально **Telegram-бот** (текст), `data/transcript.md`. Hotkeys: `⌘↩`, `⌘G`. Ответ в терминале по чанкам. Зависший процесс: `../scripts/kill-sidecar.sh`.
 
-Опционально: привязка chatId Agents (`cursor_ide_chat.py`), SDK (`scripts/cursor-agent`) для `ANSWER_PROVIDER=cursor`.
+Доки: `../docs/audio-setup.md`, `../docs/telegram-input.md`.
+
+Опционально: Agents chatId (`cursor_ide_chat.py`), Cursor SDK (`scripts/cursor-agent`) для `ANSWER_PROVIDER=cursor`.
 
 ```bash
 pip install -e ".[audio,openai]"

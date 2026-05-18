@@ -10,10 +10,12 @@
 
 1. **`copilot`** → иконка **CP** в menubar.
 2. **CP → Начать интервью** — hotkey `⌘↩` активен.
-3. Реплики: STT, **CP → Добавить реплику…**, или `data/transcript.md`.
+3. Реплики: STT (BlackHole + **Начать прослушивание**), текст в **Telegram-бота**, **CP → Добавить реплику…**, или `data/transcript.md`.
 4. **`⌘↩`** — в терминале **только вопрос и ответ** (ответ **по чанкам**, `TERMINAL_ANSWER_STREAM=1`) + `data/last-answer.md`.
 5. **`⌘G`** — очистить реплики `[Интервьюер]` и `[Я]` в `data/transcript.md` (новый вопрос с чистого листа).
-6. **CP → Закончить интервью** / **Выход**.
+6. **CP → Закончить интервью** / **Выход** (или `./scripts/kill-sidecar.sh` из другого терминала — `Ctrl+C` часто не гасит sidecar).
+
+**Telegram:** бот = только **текст**; **звонок** = BlackHole + Multi-Output (см. `docs/telegram-input.md`). Звонок можно начать после «Начать прослушивание».
 
 **Agents в Cursor:** New Agent создаёт только пользователь. Sidecar **не** переключает фокус на Cursor. Опционально: `CURSOR_AGENT_CHAT_ID` + `CURSOR_AGENT_MIRROR=1` (эксперимент, push без смены окна).
 
@@ -32,6 +34,7 @@
 - `CURSOR_OPEN_ANSWER_FILE=1` — ещё открывать `last-answer.md` в Cursor (по умолчанию **выкл**).
 - `TERMINAL_ANSWER_STREAM=1` — печатать ответ в терминал по мере генерации (по умолчанию **вкл**).
 - `CURSOR_AGENT_MIRROR=0` — не дергать `cursor agent` при ответе (рекомендуется).
+- `ANSWER_REQUEST_TIMEOUT=120` — таймаут DeepSeek/OpenAI (сек), если меню CP «зависло» на ⌘↩.
 
 ## Формат ответов на вопросы интервьюера
 
@@ -41,7 +44,7 @@
 
 ## Транскрипт
 
-- `[Интервьюер]:` — звук созвона (BlackHole, `AUDIO_INPUT_INTERVIEWER`); при **Начать интервью** + **Начать прослушивание** — сегменты в терминал (`TERMINAL_SHOW_INTERVIEWER=1`)
+- `[Интервьюер]:` — звук созвона (BlackHole) и/или **Telegram** (`TELEGRAM_INPUT_ENABLED=1`, см. `docs/telegram-input.md`); при **Начать интервью** — в терминал (`TERMINAL_SHOW_INTERVIEWER=1`); STT ещё нужно **Начать прослушивание**
 - `[Я]:` — микрофон (`AUDIO_INPUT_SELF`)
 
 На **⌘↩** — **последний блок подряд** `[Интервьюер]:` (несколько сегментов STT подряд = один вопрос; после `[Я]:` — новый вопрос). STT: `STT_LATENCY=fast`, модель `small`. Ответ: терминал (stream) + `data/last-answer.md`.

@@ -22,9 +22,11 @@
 3. Отметь: **BlackHole 2ch** + **наушники / встроенные динамики**
 4. В Zoom в качестве динамика выбери этот Multi-Output (или настрой маршрутизацию по гайдам BlackHole)
 
-## 4. Yandex Telemost / Google Meet
+## 4. Yandex Telemost / Google Meet / Telegram (звонок)
 
-Аналогично: **вывод звука** созвона → BlackHole (или Multi-Output с BlackHole).
+Аналогично: **вывод звука** созвона → BlackHole (или **Multi-Output** с BlackHole + наушники).
+
+**Telegram:** только **голосовой звонок** (не бот). Если в Telegram выбран только BlackHole — copilot слышит, **ты нет** → нужен Multi-Output. Подробно: [telegram-input.md](telegram-input.md).
 
 ## 5. Два входа в sidecar
 

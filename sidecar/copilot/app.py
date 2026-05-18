@@ -20,6 +20,7 @@ from .config import (
     audio_listen_self,
     cursor_agent_fresh_each_run,
     cursor_api_key,
+    telegram_input_enabled,
     terminal_show_interviewer_stt,
 )
 from .answer_provider import AnswerProviderError, dispatch_answer
@@ -43,6 +44,7 @@ from .shutdown import shutdown_resources, suppress_resource_tracker_warning
 from .instance import SidecarLock
 from .audio_devices import AudioDeviceNotFoundError
 from .listener import AudioListener
+from .telegram_input import TelegramInputError, TelegramInterviewerInput
 from .main_thread import run_on_main
 from .notify import notify
 from .runtime_macos import ensure_info_plist
@@ -71,6 +73,9 @@ class CopilotApp(rumps.App):
             device_hint=audio_device_hint_self(),
             label="я",
             on_transcript=self._on_transcript_self,
+        )
+        self._telegram = TelegramInterviewerInput(
+            on_message=self._on_transcript_interviewer
         )
         self.menu = [
             rumps.MenuItem("Статус: ожидание", callback=None),
@@ -125,17 +130,17 @@ class CopilotApp(rumps.App):
         self._set_status("интервью")
         warmup_local_model()
         self._start_hotkey()
+        tg_hint = self._start_telegram_input()
         bound = resolve_bound_chat_id()
         hint = (
             f"Привязан чат {bound[:8]}…"
             if bound
             else "Создай агента в Cursor (New Agent), при желании привяжи chatId"
         )
-        notify(
-            "Copilot",
-            "Интервью",
-            f"⌘↩ → ответ. ⌘G → очистить транскрипт. {hint}",
-        )
+        body = f"⌘↩ → ответ. ⌘G → очистить транскрипт. {hint}"
+        if tg_hint:
+            body += f" Telegram: {tg_hint}."
+        notify("Copilot", "Интервью", body[:180])
 
     def on_bind_chat(self, _: object) -> None:
         w = rumps.Window(
@@ -164,6 +169,21 @@ class CopilotApp(rumps.App):
     def on_clear_chat_bind(self, _: object) -> None:
         reset_agent_state()
         notify("Copilot", "Сброшено", "Привязка chatId удалена")
+
+    def _start_telegram_input(self) -> str:
+        if not telegram_input_enabled():
+            return ""
+        try:
+            status = self._telegram.start()
+            log("[copilot] Telegram:", status)
+            return status[:80]
+        except TelegramInputError as e:
+            log("[copilot] Telegram WARN:", e)
+            notify("Telegram", "Не запущен", str(e)[:120])
+            return ""
+
+    def _stop_telegram_input(self) -> None:
+        self._telegram.stop()
 
     def _on_transcript_interviewer(self, text: str) -> None:
         if interview_active() and terminal_show_interviewer_stt():
@@ -265,6 +285,7 @@ class CopilotApp(rumps.App):
         self.session_active = False
         set_interview_active(False)
         self._stop_all_audio()
+        self._stop_telegram_input()
         self._stop_hotkey()
         append_line("interviewer", "[система] sidecar: сессия остановлена")
         self._set_status("ожидание")
@@ -311,7 +332,17 @@ class CopilotApp(rumps.App):
             notify("Copilot", "Подожди", "Уже идёт запрос к SDK (⌘↩ или «Отменить SDK»).")
             return
         if not last_interviewer_line():
-            rumps.alert("Нет вопроса", "Добавь реплику [Интервьюер] в транскрипт.")
+            notify(
+                "Copilot",
+                "Нет вопроса",
+                "Сначала реплика [Интервьюер] (STT, Telegram или меню).",
+            )
+            if interview_active():
+                sys.stdout.write(
+                    "\n[copilot] Нет [Интервьюер] в транскрипте — "
+                    "дождись STT или добавь реплику вручную\n\n"
+                )
+                sys.stdout.flush()
             return
         self._sdk_busy = True
         if answer_pause_audio():
@@ -400,6 +431,7 @@ class CopilotApp(rumps.App):
             pass
         self._sdk_busy = False
         self._stop_all_audio()
+        self._stop_telegram_input()
         self._stop_hotkey()
         shutdown_resources()
         self._lock.release()

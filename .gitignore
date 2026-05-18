@@ -10,6 +10,7 @@ sidecar/*.egg-info/
 data/agent-state.json
 data/sidecar.lock
 data/push-turn.json
+data/telegram-update-offset.json
 data/transcript.md
 data/last-answer.md
 data/answers.log
