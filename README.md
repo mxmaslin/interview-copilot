@@ -83,14 +83,15 @@ hash -r && which copilot
 
 | Действие | Что делает |
 |----------|------------|
-| **Начать интервью** | Сессия + hotkey `⌘↩` |
+| **Начать интервью** | Сессия + hotkeys `⌘↩`, `⌘G` |
 | **Привязать chatId Agents…** | Опционально, если нужен `CURSOR_AGENT_MIRROR=1` |
 | **Добавить реплику интервьюера** | Дописывает `[Интервьюер]:` в `data/transcript.md` |
 | **Начать / остановить прослушивание** | Два входа (см. `.env`) |
 | **Ответ на последний вопрос** (`⌘↩`) | Ответ в **терминале по чанкам** (`TERMINAL_ANSWER_STREAM`) + `data/last-answer.md` |
+| **Очистить транскрипт** (`⌘G`) | Удалить все `[Интервьюер]` и `[Я]` из `data/transcript.md` |
 | **Открыть последний ответ** | Вручную открыть `last-answer.md` в Cursor |
 
-### 6. Accessibility (для `⌘ + Enter`)
+### 6. Accessibility (для `⌘↩` и `⌘G`)
 
 **Системные настройки → Конфиденциальность → Универсальный доступ** — разреши Terminal или Python, из которого запущен sidecar.
 
@@ -135,7 +136,7 @@ pip install -e "./sidecar[dev,openai]"
 pytest sidecar/tests -q
 ```
 
-Покрыто: config, transcript, STT latency, streaming answers, audio, terminal_display, answer_delivery, cursor_bridge (45+ тестов). **Нет** e2e: DeepSeek, микрофон, `cursor agent`.
+Покрыто: config, transcript (в т.ч. clear/merge), STT latency, streaming answers, audio, terminal_display, answer_delivery, cursor_bridge (46+ тестов). **Нет** e2e: DeepSeek, микрофон, `cursor agent`.
 
 ## Аудио (Zoom / Telemost / Meet)
 

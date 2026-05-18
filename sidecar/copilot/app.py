@@ -46,9 +46,10 @@ from .listener import AudioListener
 from .main_thread import run_on_main
 from .notify import notify
 from .runtime_macos import ensure_info_plist
-from .transcript import append_line, last_interviewer_line
+from .transcript import append_line, clear_dialogue, last_interviewer_line
 
 HOTKEY = "<cmd>+<enter>"
+HOTKEY_CLEAR = "<cmd>+g"
 
 
 class CopilotApp(rumps.App):
@@ -86,6 +87,7 @@ class CopilotApp(rumps.App):
             rumps.MenuItem("Остановить прослушивание", callback=self.on_listen_stop),
             None,
             rumps.MenuItem(f"Ответ на последний вопрос ({HOTKEY})", callback=self.on_answer),
+            rumps.MenuItem(f"Очистить транскрипт ({HOTKEY_CLEAR})", callback=self.on_clear_transcript),
             rumps.MenuItem("Отменить SDK запрос", callback=self.on_cancel_sdk),
             None,
             rumps.MenuItem("Открыть data/transcript.md", callback=self.on_open_transcript),
@@ -132,7 +134,7 @@ class CopilotApp(rumps.App):
         notify(
             "Copilot",
             "Интервью",
-            f"⌘↩ → ответ в терминале. {hint}",
+            f"⌘↩ → ответ. ⌘G → очистить транскрипт. {hint}",
         )
 
     def on_bind_chat(self, _: object) -> None:
@@ -296,6 +298,14 @@ class CopilotApp(rumps.App):
         else:
             notify("Copilot", "SDK", "Запрос уже завершился.")
 
+    def on_clear_transcript(self, _: object) -> None:
+        clear_dialogue()
+        if interview_active():
+            sys.stdout.write("\n[Транскрипт очищен — интервьюер и я]\n\n")
+            sys.stdout.flush()
+        else:
+            notify("Copilot", "Транскрипт", "Реплики интервьюера и твои удалены")
+
     def on_answer(self, _: object) -> None:
         if self._sdk_busy:
             notify("Copilot", "Подожди", "Уже идёт запрос к SDK (⌘↩ или «Отменить SDK»).")
@@ -408,7 +418,17 @@ class CopilotApp(rumps.App):
 
                     traceback.print_exc()
 
-            listener = keyboard.GlobalHotKeys({HOTKEY: on_activate})
+            def on_clear() -> None:
+                try:
+                    run_on_main(self.on_clear_transcript, None)
+                except Exception:
+                    import traceback
+
+                    traceback.print_exc()
+
+            listener = keyboard.GlobalHotKeys(
+                {HOTKEY: on_activate, HOTKEY_CLEAR: on_clear}
+            )
             listener.start()
             self._hotkey_listener = listener
         except Exception as e:
@@ -443,6 +463,8 @@ copilot — macOS menubar sidecar
 Остановка: меню «CP» → Выход (надёжнее, чем Ctrl+C). Зависший процесс: kill $(cat data/sidecar.lock)
 Повторный запуск, пока sidecar жив, завершится с ошибкой.
 
+Hotkeys (после «Начать интервью»): ⌘↩ — ответ, ⌘G — очистить transcript.
+
 Проверка, что вызывается наш бинарник:
   which copilot   # должен быть …/_copilot/.venv/bin/copilot
 """
@@ -475,7 +497,7 @@ def main() -> int:
         flush=True,
     )
     print(
-        "[copilot] CP → Начать интервью; ⌘↩ → ответ в этом терминале "
+        "[copilot] CP → Начать интервью; ⌘↩ ответ; ⌘G очистить транскрипт "
         "(+ data/last-answer.md)",
         flush=True,
     )

@@ -27,6 +27,16 @@ def _interviewer_text(line: str) -> str:
     return line.replace("[Интервьюер]:", "", 1).strip()
 
 
+def clear_dialogue() -> None:
+    """Удалить все реплики [Интервьюер] и [Я] из transcript.md."""
+    ensure_data_dir()
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    TRANSCRIPT_PATH.write_text(
+        "# Interview transcript\n\n" f"<!-- cleared {ts} -->\n",
+        encoding="utf-8",
+    )
+
+
 def dialogue_lines() -> list[str]:
     if not TRANSCRIPT_PATH.exists():
         return []
