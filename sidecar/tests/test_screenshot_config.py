@@ -34,3 +34,10 @@ def test_screenshot_vision_model_override(monkeypatch) -> None:
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
     monkeypatch.setenv("SCREENSHOT_VISION_MODEL", "gpt-4o")
     assert config.screenshot_vision_model("openai") == "gpt-4o"
+
+
+def test_screenshot_debounce_legacy_env(monkeypatch) -> None:
+    monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.delenv("SCREENSHOT_DEBOUNCE_SEC", raising=False)
+    monkeypatch.setenv("SCREENSHOT_SOLVE_DEBOUNCE_SEC", "0.5")
+    assert config.screenshot_debounce_sec() == 0.5

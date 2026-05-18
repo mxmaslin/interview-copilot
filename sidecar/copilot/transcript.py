@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timezone
 
 from .config import DATA_DIR, TRANSCRIPT_PATH
+
+_lock = threading.Lock()
 
 
 def ensure_data_dir() -> None:
@@ -11,16 +14,17 @@ def ensure_data_dir() -> None:
 
 def append_line(speaker: str, text: str) -> str:
     """speaker: 'interviewer' | 'self'"""
-    ensure_data_dir()
-    label = "[Я]" if speaker == "self" else "[Интервьюер]"
-    line = f"{label}: {text.strip()}"
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    block = f"\n<!-- {ts} -->\n{line}\n"
-    if not TRANSCRIPT_PATH.exists():
-        TRANSCRIPT_PATH.write_text("# Interview transcript\n", encoding="utf-8")
-    with TRANSCRIPT_PATH.open("a", encoding="utf-8") as f:
-        f.write(block)
-    return line
+    with _lock:
+        ensure_data_dir()
+        label = "[Я]" if speaker == "self" else "[Интервьюер]"
+        line = f"{label}: {text.strip()}"
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        block = f"\n<!-- {ts} -->\n{line}\n"
+        if not TRANSCRIPT_PATH.exists():
+            TRANSCRIPT_PATH.write_text("# Interview transcript\n", encoding="utf-8")
+        with TRANSCRIPT_PATH.open("a", encoding="utf-8") as f:
+            f.write(block)
+        return line
 
 
 def _interviewer_text(line: str) -> str:
@@ -29,19 +33,22 @@ def _interviewer_text(line: str) -> str:
 
 def clear_dialogue() -> None:
     """Удалить все реплики [Интервьюер] и [Я] из transcript.md."""
-    ensure_data_dir()
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    TRANSCRIPT_PATH.write_text(
-        "# Interview transcript\n\n" f"<!-- cleared {ts} -->\n",
-        encoding="utf-8",
-    )
+    with _lock:
+        ensure_data_dir()
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        TRANSCRIPT_PATH.write_text(
+            "# Interview transcript\n\n" f"<!-- cleared {ts} -->\n",
+            encoding="utf-8",
+        )
 
 
 def dialogue_lines() -> list[str]:
-    if not TRANSCRIPT_PATH.exists():
-        return []
+    with _lock:
+        if not TRANSCRIPT_PATH.exists():
+            return []
+        lines = TRANSCRIPT_PATH.read_text(encoding="utf-8").splitlines()
     out: list[str] = []
-    for ln in TRANSCRIPT_PATH.read_text(encoding="utf-8").splitlines():
+    for ln in lines:
         s = ln.strip()
         if s.startswith("[Интервьюер]:") or s.startswith("[Я]:"):
             out.append(s)

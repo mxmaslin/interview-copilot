@@ -289,22 +289,28 @@ def solve_screenshot_stream(
 
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     payload_path = DATA_DIR / "screenshot-cursor-payload.json"
-    payload_path.write_text(
-        json.dumps(
-            {
-                "pngBase64": base64.standard_b64encode(png_bytes).decode("ascii"),
-                "mimeType": mime,
-            },
-            ensure_ascii=False,
-        ),
-        encoding="utf-8",
-    )
-    return _run_node_stream(
-        "solve-screenshot",
-        f"--payload={payload_path}",
-        on_delta=on_delta,
-        timeout=_TIMEOUT_SCREENSHOT,
-    )
+    try:
+        payload_path.write_text(
+            json.dumps(
+                {
+                    "pngBase64": base64.standard_b64encode(png_bytes).decode("ascii"),
+                    "mimeType": mime,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return _run_node_stream(
+            "solve-screenshot",
+            f"--payload={payload_path}",
+            on_delta=on_delta,
+            timeout=_TIMEOUT_SCREENSHOT,
+        )
+    finally:
+        try:
+            payload_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 def agent_session_ready() -> bool:
     return chat_is_bound()

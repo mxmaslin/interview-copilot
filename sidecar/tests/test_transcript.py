@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import copilot.transcript as transcript
 
 
@@ -80,3 +82,38 @@ def test_last_interviewer_line_empty(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     assert transcript.last_interviewer_line() is None
+
+
+def test_clear_during_concurrent_append(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+
+    errors: list[BaseException] = []
+    barrier = threading.Barrier(2)
+
+    def append_loop() -> None:
+        try:
+            barrier.wait(timeout=2)
+            for i in range(40):
+                transcript.append_line("interviewer", f"seg-{i}")
+        except BaseException as e:
+            errors.append(e)
+
+    def clear_once() -> None:
+        try:
+            barrier.wait(timeout=2)
+            transcript.clear_dialogue()
+        except BaseException as e:
+            errors.append(e)
+
+    t1 = threading.Thread(target=append_loop)
+    t2 = threading.Thread(target=clear_once)
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+
+    assert not errors
+    text = path.read_text(encoding="utf-8")
+    assert "seg-" not in text or "cleared" in text

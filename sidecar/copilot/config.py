@@ -356,8 +356,11 @@ def screenshot_poll_sec() -> float:
 
 def screenshot_debounce_sec() -> float:
     """Пауза после changeCount, пока macOS допишет PNG в буфер."""
+    raw = _env("SCREENSHOT_DEBOUNCE_SEC") or _env(
+        "SCREENSHOT_SOLVE_DEBOUNCE_SEC", "0.25"
+    )
     try:
-        return float(_env("SCREENSHOT_DEBOUNCE_SEC", "0.25"))
+        return float(raw)
     except ValueError:
         return 0.25
 
@@ -392,14 +395,6 @@ def screenshot_vision_model(provider: str) -> str:
     if provider == "cursor":
         return cursor_model()
     return "gpt-4o-mini"
-
-
-def screenshot_solve_debounce_sec() -> float:
-    raw = _env("SCREENSHOT_DEBOUNCE_SEC") or _env("SCREENSHOT_SOLVE_DEBOUNCE_SEC", "0.35")
-    try:
-        return float(raw)
-    except ValueError:
-        return 0.35
 
 
 def screenshot_solve_also_last_answer() -> bool:
