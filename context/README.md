@@ -3,9 +3,10 @@
 | Файл | Назначение |
 |------|------------|
 | `resume.md` | Резюме / опыт — **`@context/resume.md`** в Cursor |
-| `resume.hh-url` | Ссылка на актуальное резюме hh.ru |
+| `resume.hh-url` | Ваш URL hh.ru (локально, **не в git**) |
+| `resume.hh-url.example` | Шаблон URL (в git) |
 | `resume.example.md` | Пример структуры (в git) |
-| `resume-for-hh.md` | Текст для копипаста на hh.ru |
+| `resume-for-hh.md` | Текст для hh (локально, gitignored) |
 | `vacancy.md` | Описание вакансии (опционально) |
 
 ## Обновить резюме с hh.ru

@@ -21,4 +21,11 @@ data/answers.log
 .vscode/zsh/.zcompdump*
 context/resume.md
 context/resume-for-hh.md
+context/resume.hh-url
+context/vacancy.md
 резюме*.pdf
+*.pdf
+.playwright-mcp/
+.env.local
+.env.*.local
+secrets/

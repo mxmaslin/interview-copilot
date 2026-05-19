@@ -20,7 +20,7 @@ def test_session_id_prefers_chat_id() -> None:
 
 
 def test_normalize_uuid() -> None:
-    uid = "054d6e27-69ad-4692-950d-6732863ccd45"
+    uid = "00000000-0000-4000-8000-000000000001"
     assert normalize_chat_id(uid) == uid
 
 
@@ -30,8 +30,8 @@ def test_bind_chat_id(tmp_path, monkeypatch) -> None:
         tmp_path / "agent-state.json",
     )
     monkeypatch.setattr("copilot.cursor_ide_chat.REPO_ROOT", tmp_path)
-    out = bind_chat_id("054d6e27-69ad-4692-950d-6732863ccd45")
-    assert out["chatId"] == "054d6e27-69ad-4692-950d-6732863ccd45"
+    out = bind_chat_id("00000000-0000-4000-8000-000000000001")
+    assert out["chatId"] == "00000000-0000-4000-8000-000000000001"
     data = json.loads((tmp_path / "agent-state.json").read_text())
     assert data["kind"] == "user-bound"
     assert chat_is_bound()
@@ -44,6 +44,6 @@ def test_resolve_from_env(tmp_path, monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "copilot.cursor_ide_chat.cursor_agent_chat_id_env",
-        lambda: "054d6e27-69ad-4692-950d-6732863ccd45",
+        lambda: "00000000-0000-4000-8000-000000000001",
     )
-    assert resolve_bound_chat_id() == "054d6e27-69ad-4692-950d-6732863ccd45"
+    assert resolve_bound_chat_id() == "00000000-0000-4000-8000-000000000001"

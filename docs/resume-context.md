@@ -4,14 +4,13 @@
 
 ## Источник
 
-Актуальная ссылка: `context/resume.hh-url`  
-Сейчас: https://hh.ru/resume/YOUR_HH_RESUME_ID
+Локально (не в git): `cp context/resume.hh-url.example context/resume.hh-url` и вставь URL резюме.
 
 Публичная страница hh.ru **без входа не читается** (SPA + API `403 forbidden`). Нужен один из способов ниже.
 
 ## Exa vs API hh.ru
 
-| Способ | Когда работает | Для твоего резюме |
+| Способ | Когда работает | Заметки |
 |--------|----------------|-------------------|
 | **API hh.ru** + `HH_ACCESS_TOKEN` | OAuth соискателя ([dev.hh.ru](https://dev.hh.ru)), `GET /resumes/{id}` | **Рекомендуется** — полный JSON, стабильно |
 | **Exa** (`EXA_API_KEY`, `--exa`) | Публичная страница, которую Exa может скачать | Часто **нет**: hh — SPA, таймаут/логин; закрытое резюме — 403 |

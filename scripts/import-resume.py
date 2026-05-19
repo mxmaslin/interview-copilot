@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -15,10 +16,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RESUME_MD = ROOT / "context" / "resume.md"
 URL_FILE = ROOT / "context" / "resume.hh-url"
-DEFAULT_RESUME_ID = "YOUR_HH_RESUME_ID"
 HH_API = "https://api.hh.ru/resumes/{resume_id}"
 HH_MINE_API = "https://api.hh.ru/resumes/mine"
 EXA_CONTENTS_API = "https://api.exa.ai/contents"
+
+
+def _parse_resume_id(url: str) -> str:
+    m = re.search(r"/resume/([a-f0-9]+)", url, re.I)
+    return m.group(1) if m else ""
 
 
 def _read_url() -> str:
@@ -26,7 +31,14 @@ def _read_url() -> str:
         line = URL_FILE.read_text(encoding="utf-8").strip().splitlines()
         if line:
             return line[0].strip()
-    return f"https://hh.ru/resume/{DEFAULT_RESUME_ID}"
+    return ""
+
+
+def _effective_resume_id(cli_id: str) -> str:
+    rid = (cli_id or "").strip() or os.environ.get("HH_RESUME_ID", "").strip()
+    if rid:
+        return rid
+    return _parse_resume_id(_read_url())
 
 
 def _month_year(d: dict | None) -> str:
@@ -208,8 +220,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--resume-id",
-        default=DEFAULT_RESUME_ID,
-        help=f"ID резюме на hh.ru (default: {DEFAULT_RESUME_ID})",
+        default="",
+        help="ID резюме hh.ru (или HH_RESUME_ID / context/resume.hh-url)",
     )
     parser.add_argument(
         "--hh-token",
@@ -228,11 +240,23 @@ def main() -> int:
     )
     args = parser.parse_args()
     url = _read_url()
+    resume_id = _effective_resume_id(args.resume_id)
 
     if args.hh_token:
-        data = fetch_hh_resume(args.resume_id, args.hh_token.strip())
+        if not resume_id:
+            print(
+                "Укажи --resume-id, HH_RESUME_ID или context/resume.hh-url "
+                "(см. context/resume.hh-url.example)",
+                file=sys.stderr,
+            )
+            return 1
+        data = fetch_hh_resume(resume_id, args.hh_token.strip())
         body = _format_hh_resume(data)
-        write_resume_md(body, source="hh.ru API", url=url)
+        write_resume_md(
+            body,
+            source="hh.ru API",
+            url=url or f"https://hh.ru/resume/{resume_id}",
+        )
         return 0
 
     if args.file:
