@@ -5,6 +5,7 @@
 | `resume.md` | Резюме / опыт — **`@context/resume.md`** в Cursor |
 | `resume.hh-url` | Ссылка на актуальное резюме hh.ru |
 | `resume.example.md` | Пример структуры (в git) |
+| `resume-for-hh.md` | Текст для копипаста на hh.ru |
 | `vacancy.md` | Описание вакансии (опционально) |
 
 ## Обновить резюме с hh.ru

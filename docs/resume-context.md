@@ -64,6 +64,11 @@ EXA_API_KEY=... python scripts/import-resume.py --exa
 
 Или в Cursor: MCP Exa → `web_fetch_exa` по URL из `context/resume.hh-url`.
 
+## Редакция для hh.ru
+
+Готовый текст для копипаста в поля hh: **`context/resume-for-hh.md`** (блоки «О себе», опыт, навыки).  
+Агент Copilot читает **`context/resume.md`** — держи оба файла в синхроне после правок.
+
 ## В Cursor
 
 В чате агента: `@context/resume.md` — или правило Copilot уже ссылается на файл.

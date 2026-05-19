@@ -20,4 +20,5 @@ data/answers.log
 .vscode/zsh/.zsh_history
 .vscode/zsh/.zcompdump*
 context/resume.md
+context/resume-for-hh.md
 резюме*.pdf
