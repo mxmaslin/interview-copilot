@@ -164,7 +164,7 @@ class AudioListener:
 
         def deliver(text: str) -> None:
             if is_stt_hallucination(text):
-                logger.debug("STT dropped (%s): %r", self._speaker, text[:80])
+                logger.debug("STT dropped (%s), len=%d", self._speaker, len(text))
                 return
             try:
                 on_done(text)

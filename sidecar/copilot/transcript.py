@@ -1,11 +1,18 @@
 from __future__ import annotations
 
-import re
 import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
 
 from .config import DATA_DIR, TRANSCRIPT_PATH
+from .transcript_rules import (
+    self_override_length_ratio,
+    self_override_min_self_len,
+    spurious_interviewer_re,
+    spurious_max_chars,
+    spurious_max_words,
+    spurious_short_questions,
+)
 
 _lock = threading.Lock()
 _call_mic_muted_runtime = False
@@ -151,34 +158,21 @@ def last_dialogue_question() -> tuple[str, str] | None:
     return None
 
 
-_SPURIOUS_INTERVIEWER_RE = re.compile(
-    r"^(?:"
-    r"сказать\??|"
-    r"да\b|"
-    r"алло\??|"
-    r"угу\.?|"
-    r"ага\.?|"
-    r"ну\b|"
-    r"слушаю\.?|"
-    r"повтори\.?|"
-    r"можно\??|"
-    r"так\??"
-    r")\s*$",
-    re.IGNORECASE,
-)
-
-
 def _is_spurious_interviewer_fragment(text: str) -> bool:
     """Короткий шум с BlackHole (UI созвона, эхо), не вопрос собеседника."""
     t = text.strip()
     if not t:
         return True
-    if _SPURIOUS_INTERVIEWER_RE.match(t):
+    if spurious_interviewer_re().match(t):
         return True
     words = t.split()
-    if len(t) <= 22 and len(words) <= 3 and t.endswith("?"):
+    if (
+        len(t) <= spurious_max_chars()
+        and len(words) <= spurious_max_words()
+        and t.endswith("?")
+    ):
         low = t.lower().rstrip("?")
-        if low in ("сказать", "да", "алло", "ну", "так", "можно"):
+        if low in spurious_short_questions():
             return True
     return False
 
@@ -187,11 +181,12 @@ def _self_overrides_interviewer(interviewer: str, self_text: str) -> bool:
     """Вопрос с Brio важнее короткого шума с BlackHole (не про «слышите»)."""
     s = self_text.strip()
     i = interviewer.strip()
-    if len(s) < 10:
+    if len(s) < self_override_min_self_len():
         return False
     if _is_spurious_interviewer_fragment(i):
         return True
-    if len(i) < len(s) * 0.45 and len(s.split()) >= len(i.split()) + 2:
+    ratio = self_override_length_ratio()
+    if len(i) < len(s) * ratio and len(s.split()) >= len(i.split()) + 2:
         return True
     return False
 

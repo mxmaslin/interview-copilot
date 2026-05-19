@@ -22,6 +22,8 @@ data/answers.log
 context/resume.md
 context/resume-for-hh.md
 context/resume.hh-url
+context/forbidden-patterns.local
+context/scrub-replacements.local
 context/vacancy.md
 резюме*.pdf
 *.pdf

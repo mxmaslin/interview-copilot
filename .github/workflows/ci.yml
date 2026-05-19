@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: scripts/cursor-agent/package-lock.json
+
+      - name: Python deps
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -U pip
+          pip install -e "./sidecar[audio,dev]"
+
+      - name: Node deps (cursor-agent)
+        run: npm ci
+        working-directory: scripts/cursor-agent
+
+      - name: Repo hygiene
+        run: |
+          source .venv/bin/activate
+          cd sidecar && pytest tests/test_repo_hygiene.py -q
+
+      - name: Unit tests
+        run: |
+          source .venv/bin/activate
+          cd sidecar && pytest -q

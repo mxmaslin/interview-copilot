@@ -8,6 +8,8 @@
 | `resume.example.md` | Пример структуры (в git) |
 | `resume-for-hh.md` | Текст для hh (локально, gitignored) |
 | `vacancy.md` | Описание вакансии (опционально) |
+| `forbidden-patterns.local` | Локальные подстроки для `test_repo_hygiene` (gitignored) |
+| `scrub-replacements.local` | Замены для `scripts/scrub-git-history.sh` (gitignored) |
 
 ## Обновить резюме с hh.ru
 

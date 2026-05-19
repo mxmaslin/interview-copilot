@@ -1,0 +1,15 @@
+{
+  "spurious_interviewer_regex": "^(?:сказать\\??|да\\b|алло\\??|угу\\.?|ага\\.?|ну\\b|слушаю\\.?|повтори\\.?|можно\\??|так\\??)\\s*$",
+  "spurious_short_questions": [
+    "сказать",
+    "да",
+    "алло",
+    "ну",
+    "так",
+    "можно"
+  ],
+  "spurious_max_chars": 22,
+  "spurious_max_words": 3,
+  "self_override_min_self_len": 10,
+  "self_override_length_ratio": 0.45
+}

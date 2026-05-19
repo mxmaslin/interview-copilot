@@ -1,0 +1,11 @@
+# Локальные подстроки, которых не должно быть в git-tracked файлах.
+# Скопируй в forbidden-patterns.local (файл в .gitignore):
+#
+#   cp context/forbidden-patterns.example context/forbidden-patterns.local
+#
+# Одна подстрока на строку; строки с # игнорируются.
+# pytest tests/test_repo_hygiene.py подхватит файл только у тебя на машине.
+# В CI проверяются regex (hh resume URL/ID) без этого файла.
+
+YOUR_HH_RESUME_ID
+YOUR_FULL_NAME

@@ -26,6 +26,20 @@ import { Agent, CursorAgentError } from "@cursor/sdk";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
 const STATE_DIR = join(REPO_ROOT, "data");
+const TRANSCRIPT_RULES_PATH = join(
+  REPO_ROOT,
+  "sidecar/copilot/transcript_rules.json",
+);
+
+/** @type {Record<string, unknown> | null} */
+let _transcriptRules = null;
+
+function loadTranscriptRules() {
+  if (_transcriptRules) return _transcriptRules;
+  const raw = readFileSync(TRANSCRIPT_RULES_PATH, "utf8");
+  _transcriptRules = JSON.parse(raw);
+  return _transcriptRules;
+}
 
 /** Подхватить .env из корня репо (как sidecar), если ключи не в shell. */
 function loadRepoEnv() {
@@ -450,27 +464,34 @@ function lastDialogueQuestion(transcript) {
   return { text: "", speaker: "" };
 }
 
-const SPURIOUS_IV_RE =
-  /^(?:сказать\??|да\b|алло\??|угу\.?|ага\.?|ну\b|слушаю\.?|повтори\.?|можно\??|так\??)\s*$/i;
-
 function isSpuriousInterviewerFragment(text) {
+  const rules = loadTranscriptRules();
   const t = text.trim();
   if (!t) return true;
-  if (SPURIOUS_IV_RE.test(t)) return true;
+  const re = new RegExp(String(rules.spurious_interviewer_regex), "i");
+  if (re.test(t)) return true;
   const words = t.split(/\s+/);
-  if (t.length <= 22 && words.length <= 3 && t.endsWith("?")) {
+  const maxChars = Number(rules.spurious_max_chars ?? 22);
+  const maxWords = Number(rules.spurious_max_words ?? 3);
+  const shortQs = (rules.spurious_short_questions ?? []).map((w) =>
+    String(w).toLowerCase(),
+  );
+  if (t.length <= maxChars && words.length <= maxWords && t.endsWith("?")) {
     const low = t.toLowerCase().replace(/\?+$/, "");
-    if (["сказать", "да", "алло", "ну", "так", "можно"].includes(low)) return true;
+    if (shortQs.includes(low)) return true;
   }
   return false;
 }
 
 function selfOverridesInterviewer(interviewer, selfText) {
+  const rules = loadTranscriptRules();
   const s = selfText.trim();
   const i = interviewer.trim();
-  if (s.length < 10) return false;
+  const minSelf = Number(rules.self_override_min_self_len ?? 10);
+  const ratio = Number(rules.self_override_length_ratio ?? 0.45);
+  if (s.length < minSelf) return false;
   if (isSpuriousInterviewerFragment(i)) return true;
-  if (i.length < s.length * 0.45 && s.split(/\s+/).length >= i.split(/\s+/).length + 2) {
+  if (i.length < s.length * ratio && s.split(/\s+/).length >= i.split(/\s+/).length + 2) {
     return true;
   }
   return false;

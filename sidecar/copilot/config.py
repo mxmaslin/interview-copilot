@@ -10,10 +10,16 @@ ANSWERS_PATH = DATA_DIR / "answers.log"
 CURSOR_AGENT_DIR = REPO_ROOT / "scripts" / "cursor-agent"
 AGENT_STATE_PATH = DATA_DIR / "agent-state.json"
 
+_dotenv_loaded = False
+
 
 def load_dotenv() -> None:
+    global _dotenv_loaded
+    if _dotenv_loaded:
+        return
     env_file = REPO_ROOT / ".env"
     if not env_file.exists():
+        _dotenv_loaded = True
         return
     try:
         from dotenv import load_dotenv as _load
@@ -21,10 +27,12 @@ def load_dotenv() -> None:
         _load(env_file)
     except ImportError:
         pass
+    _dotenv_loaded = True
 
 
 def _env(name: str, default: str = "") -> str:
-    load_dotenv()
+    if not _dotenv_loaded:
+        load_dotenv()
     return os.environ.get(name, default).strip()
 
 

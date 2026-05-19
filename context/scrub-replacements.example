@@ -1,0 +1,8 @@
+# Замены для git-filter-repo (literal==>replacement).
+# Скопируй в scrub-replacements.local (в .gitignore), подставь свои значения:
+#
+#   cp context/scrub-replacements.example context/scrub-replacements.local
+#   ./scripts/scrub-git-history.sh
+#
+# Пример (подставь свой ID резюме hh.ru):
+# abcdef0123456789abcdef0123456789ab==>YOUR_HH_RESUME_ID
