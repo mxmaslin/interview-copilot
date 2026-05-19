@@ -32,7 +32,12 @@ from .cursor_bridge import (
 
 _openai_clients: dict[tuple[str, str], object] = {}
 from .cursor_ide_chat import BIND_HELP, chat_is_bound
-from .transcript import compact_dialogue_context, last_interviewer_line
+from .transcript import (
+    answer_self_questions_active,
+    compact_dialogue_context,
+    last_answer_line,
+    last_answer_target,
+)
 
 INTERVIEW_SYSTEM = (
     "Ты — ассистент на техническом интервью (Python backend). "
@@ -63,11 +68,24 @@ def _openai_client(*, api_key: str, base_url: str | None):
     return client
 
 
+def _no_question_error() -> str:
+    if answer_self_questions_active():
+        return "Нет реплики [Интервьюер] или [Я] в транскрипте."
+    return "Нет реплики [Интервьюер] в транскрипте."
+
+
 def _build_user_message() -> str:
-    question = last_interviewer_line()
-    if not question:
-        raise AnswerProviderError("Нет реплики [Интервьюер] в транскрипте.")
-    user = f"Вопрос интервьюера:\n{question.strip()}"
+    target = last_answer_target()
+    if not target:
+        raise AnswerProviderError(_no_question_error())
+    question, speaker = target
+    if speaker == "self":
+        user = (
+            "Мой вопрос (соло на созвоне или микрофон на созвоне выключен):\n"
+            f"{question.strip()}"
+        )
+    else:
+        user = f"Вопрос интервьюера:\n{question.strip()}"
     if not answer_minimal_context():
         context = compact_dialogue_context(answer_context_chars())
         if context:
@@ -221,7 +239,7 @@ def answer_via_openai() -> dict[str, Any]:
         raise AnswerProviderError(
             "ANSWER_PROVIDER=openai, но OPENAI_API_KEY не задан в .env"
         )
-    question = last_interviewer_line() or ""
+    question = last_answer_line() or ""
     model = answer_openai_model()
 
     if terminal_answer_stream():
@@ -256,7 +274,7 @@ def answer_via_deepseek() -> dict[str, Any]:
         raise AnswerProviderError(
             "ANSWER_PROVIDER=deepseek, но DEEPSEEK_API_KEY не задан в .env"
         )
-    question = last_interviewer_line() or ""
+    question = last_answer_line() or ""
     model = deepseek_answer_model()
 
     if terminal_answer_stream():
@@ -293,7 +311,7 @@ def answer_via_deepseek() -> dict[str, Any]:
 
 
 def answer_via_cursor() -> dict[str, Any]:
-    question = last_interviewer_line() or ""
+    question = last_answer_line() or ""
     model = cursor_model()
 
     if terminal_answer_stream():

@@ -42,11 +42,28 @@ def test_last_interviewer_question_merges_consecutive(tmp_path, monkeypatch) -> 
     path = tmp_path / "transcript.md"
     monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
     monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    import copilot.config as cfg
+
+    monkeypatch.setattr(cfg, "answer_interviewer_merge_max", lambda: 10)
 
     transcript.append_line("interviewer", "Расскажи про GIL")
     transcript.append_line("interviewer", "и про asyncio")
 
     assert transcript.last_interviewer_question() == "Расскажи про GIL и про asyncio"
+
+
+def test_last_interviewer_merge_capped(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    import copilot.config as cfg
+
+    monkeypatch.setattr(cfg, "answer_interviewer_merge_max", lambda: 2)
+
+    for n in range(5):
+        transcript.append_line("interviewer", f"seg{n}")
+
+    assert transcript.last_interviewer_question() == "seg3 seg4"
 
 
 def test_last_interviewer_question_stops_at_self(tmp_path, monkeypatch) -> None:
@@ -85,6 +102,103 @@ def test_last_interviewer_skips_trailing_self(tmp_path, monkeypatch) -> None:
     transcript.append_line("self", "Ещё раз спросите")
 
     assert transcript.last_interviewer_line() == "Ну не надо."
+
+
+def test_last_self_question_merges(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+
+    transcript.append_line("self", "Что такое GIL")
+    transcript.append_line("self", "и asyncio")
+
+    assert transcript.last_self_question() == "Что такое GIL и asyncio"
+
+
+def test_last_answer_target_solo_self(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: True)
+
+    transcript.append_line("self", "Расскажи про Redis")
+
+    assert transcript.last_answer_target() == ("Расскажи про Redis", "self")
+
+
+def test_last_answer_target_interviewer_when_both(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: True)
+
+    transcript.append_line("interviewer", "Вопрос один")
+    transcript.append_line("self", "Мой ответ")
+    transcript.append_line("self", "Уточни про кэш")
+
+    assert transcript.last_answer_target() == (
+        "Мой ответ Уточни про кэш",
+        "self",
+    )
+
+
+def test_self_overrides_spurious_interviewer(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: False)
+
+    transcript.append_line("self", "Здравствуйте меня слышишь?")
+    transcript.append_line("interviewer", "Сказать?")
+
+    assert transcript.last_answer_target() == (
+        "Здравствуйте меня слышишь?",
+        "self",
+    )
+
+
+def test_real_interviewer_not_overridden_by_short_self(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: False)
+
+    transcript.append_line("interviewer", "Расскажите про транзакции в PostgreSQL")
+    transcript.append_line("self", "угу")
+
+    assert transcript.last_answer_target() == (
+        "Расскажите про транзакции в PostgreSQL",
+        "interviewer",
+    )
+
+
+def test_last_answer_target_normal_interview(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: False)
+
+    transcript.append_line("interviewer", "Про GIL")
+    transcript.append_line("self", "Мой вопрос себе")
+
+    assert transcript.last_answer_target() == ("Про GIL", "interviewer")
+
+
+def test_answer_self_active_when_no_interviewer(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+
+    import copilot.config as cfg
+
+    monkeypatch.setattr(cfg, "answer_self_questions_mode", lambda: "auto")
+    monkeypatch.setattr(cfg, "call_mic_muted_on_call", lambda: False)
+    monkeypatch.setattr(cfg, "audio_listen_interviewer", lambda: True)
+
+    transcript.append_line("self", "solo")
+    assert transcript.answer_self_questions_active() is True
 
 
 def test_last_interviewer_line_empty(tmp_path, monkeypatch) -> None:

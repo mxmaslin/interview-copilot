@@ -14,13 +14,12 @@
 
 Интервью ведёт **menubar sidecar** (`copilot` в **Terminal.app** / iTerm), не фразы в чате:
 
-1. **`copilot`** → иконка **CP** в menubar.
-2. **CP → Начать интервью** — hotkey `⌘↩` активен.
-3. Реплики: STT (BlackHole + **Начать прослушивание**), текст в **Telegram-бота**, **CP → Добавить реплику…**, или `data/transcript.md`.
-4. **`⌘↩`** — в терминале **только вопрос и ответ** (ответ **по чанкам**, `TERMINAL_ANSWER_STREAM=1`) + `data/last-answer.md`.
-5. **`⌘G`** — очистить реплики `[Интервьюер]` и `[Я]` в `data/transcript.md` (новый вопрос с чистого листа).
-6. **`⌘⌃⇧4`** — скриншот в буфер → решение задачи в терминал (`SCREENSHOT_SOLVE_ENABLED=1`, см. `docs/screenshot-solve.md`).
-7. **CP → Закончить интервью** / **Выход** (или `./scripts/kill-sidecar.sh` из другого терминала — `Ctrl+C` часто не гасит sidecar).
+1. **`copilot`** → иконка **CP** в menubar; сессия интервью и `⌘↩` / `⌘G` **сразу**; **транскрипт сбрасывается** при старте.
+2. Реплики: STT (BlackHole + **Начать прослушивание**), текст в **Telegram-бота**, **CP → Добавить реплику…**, или `data/transcript.md`.
+3. **`⌘↩`** — в терминале **только вопрос и ответ** (ответ **по чанкам**, `TERMINAL_ANSWER_STREAM=1`) + `data/last-answer.md`.
+4. **`⌘G`** — очистить реплики `[Интервьюер]` и `[Я]` в `data/transcript.md` (новый вопрос с чистого листа).
+5. **`⌘⌃⇧4`** — скриншот в буфер → решение задачи в терминал (`SCREENSHOT_SOLVE_ENABLED=1`, см. `docs/screenshot-solve.md`).
+6. **Выход:** **CP → Выход** или **Ctrl+C** в терминале с `copilot` (или `./scripts/kill-sidecar.sh`).
 
 **Telegram:** бот = только **текст**; **звонок** = BlackHole + Multi-Output (см. `docs/telegram-input.md`). Звонок можно начать после «Начать прослушивание».
 
@@ -55,10 +54,10 @@
 
 ## Транскрипт
 
-- `[Интервьюер]:` — звук созвона (BlackHole) и/или **Telegram** (`TELEGRAM_INPUT_ENABLED=1`, см. `docs/telegram-input.md`); при **Начать интервью** — в терминал (`TERMINAL_SHOW_INTERVIEWER=1`); STT ещё нужно **Начать прослушивание**
+- `[Интервьюер]:` — звук созвона (BlackHole) и/или **Telegram** (`TELEGRAM_INPUT_ENABLED=1`, см. `docs/telegram-input.md`); в терминал при `TERMINAL_SHOW_INTERVIEWER=1`; STT — **Начать прослушивание**
 - `[Я]:` — микрофон (`AUDIO_INPUT_SELF`); в терминал при `TERMINAL_SHOW_SELF=1`
 
-На **⌘↩** — последний блок `[Интервьюер]` с конца (хвостовые `[Я]` после реплики собеседника **не** блокируют вопрос). STT: `STT_LATENCY`, `WHISPER_PROMPT_MODE=interview|general`. Ответ: терминал (stream) + `data/last-answer.md`.
+На **⌘↩** — последние сегменты с конца (`ANSWER_INTERVIEWER_MERGE_MAX=2`, не весь накопленный звонок): обычно `[Интервьюер]` (хвостовые `[Я]` после него не мешают). Также `[Я]` при соло / `CALL_MIC_MUTED=1` / меню «Микрофон на созвоне выкл» / `AUDIO_ENABLE_INTERVIEWER=0`. Старт `copilot` очищает `transcript.md`; внутри сессии — **⌘G**. STT: `STT_LATENCY`, `WHISPER_PROMPT_MODE=interview|general`. Ответ: терминал (stream) + `data/last-answer.md`.
 
 **STT и скриншот:** скрин **⌘⌃⇧4** глушит микрофон, пока очередь скриншотов не пуста; затем STT снова включается, если было **Начать прослушивание**. **⌘↩** (в т.ч. после Telegram) **не блокируется** очередью скринов — ответ и скриншоты параллельно. **⌘↩** с `deepseek` STT не глушит. Telegram polling с момента запуска `copilot`. См. `docs/audio-setup.md`, `docs/telegram-input.md`.
 

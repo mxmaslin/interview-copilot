@@ -60,7 +60,13 @@ from .telegram_input import TelegramInputError, TelegramInterviewerInput
 from .main_thread import run_on_main
 from .notify import notify
 from .runtime_macos import ensure_info_plist
-from .transcript import append_line, clear_dialogue, last_interviewer_line
+from .transcript import (
+    answer_self_questions_active,
+    append_line,
+    clear_dialogue,
+    last_answer_line,
+    set_call_mic_muted_runtime,
+)
 
 HOTKEY = "<cmd>+<enter>"
 HOTKEY_CLEAR = "<cmd>+g"
@@ -99,8 +105,6 @@ class CopilotApp(rumps.App):
         self.menu = [
             rumps.MenuItem("Статус: ожидание", callback=None),
             None,
-            rumps.MenuItem("Начать интервью", callback=self.on_start),
-            rumps.MenuItem("Закончить интервью", callback=self.on_stop),
             rumps.MenuItem("Привязать chatId Agents…", callback=self.on_bind_chat),
             rumps.MenuItem("Сбросить привязку chatId", callback=self.on_clear_chat_bind),
             None,
@@ -111,6 +115,10 @@ class CopilotApp(rumps.App):
             rumps.MenuItem("Остановить прослушивание", callback=self.on_listen_stop),
             None,
             rumps.MenuItem(f"Ответ на последний вопрос ({HOTKEY})", callback=self.on_answer),
+            rumps.MenuItem(
+                "Микрофон на созвоне выкл (свои вопросы)",
+                callback=self.on_toggle_call_mic_muted,
+            ),
             rumps.MenuItem(f"Очистить транскрипт ({HOTKEY_CLEAR})", callback=self.on_clear_transcript),
             rumps.MenuItem(
                 "Решить скриншот из буфера (⌘⌃⇧4)",
@@ -155,26 +163,35 @@ class CopilotApp(rumps.App):
         from .session_warmup import warmup_session
 
         warmup_session()
+        self._begin_interview(silent=True)
 
-    def on_start(self, _: object) -> None:
+    def _begin_interview(self, *, silent: bool = False) -> None:
+        clear_dialogue()
         self.session_active = True
         set_interview_active(True)
         self._set_status("интервью")
-        from .session_warmup import warmup_session
-
-        warmup_session()
         self._start_hotkey()
-        tg_hint = self._start_telegram_input()
+        if silent:
+            log("[copilot] сессия интервью (⌘↩, ⌘G); transcript сброшен")
+            return
         bound = resolve_bound_chat_id()
         hint = (
             f"Привязан чат {bound[:8]}…"
             if bound
             else "Создай агента в Cursor (New Agent), при желании привяжи chatId"
         )
-        body = f"⌘↩ → ответ. ⌘G → очистить транскрипт. {hint}"
-        if tg_hint:
-            body += f" Telegram: {tg_hint}."
-        notify("Copilot", "Интервью", body[:180])
+        notify("Copilot", "Интервью", f"⌘↩ ответ. ⌘G очистить. {hint}"[:180])
+
+    def _end_interview_session(self) -> None:
+        if self._answer_busy or self._screenshot_active():
+            cancel_active_sdk()
+        self._answer_busy = False
+        self._listening_active = False
+        self._sdk_pause_depth = 0
+        self.session_active = False
+        set_interview_active(False)
+        self._stop_all_audio()
+        self._stop_hotkey()
 
     def on_bind_chat(self, _: object) -> None:
         w = rumps.Window(
@@ -339,20 +356,6 @@ class CopilotApp(rumps.App):
             or self._screenshot_queue.pending_count() > 0
         )
 
-    def on_stop(self, _: object) -> None:
-        if self._answer_busy or self._screenshot_active():
-            cancel_active_sdk()
-        self._answer_busy = False
-        self._listening_active = False
-        self._sdk_pause_depth = 0
-        self.session_active = False
-        set_interview_active(False)
-        self._stop_all_audio()
-        self._stop_hotkey()
-        append_line("interviewer", "[система] sidecar: сессия остановлена")
-        self._set_status("ожидание")
-        notify("Copilot", "Сессия", "Остановлена")
-
     def on_add_interviewer(self, _: object) -> None:
         w = rumps.Window("Реплика интервьюера", "Текст", default_text="")
         w.add_buttons("OK", "Отмена")
@@ -452,6 +455,23 @@ class CopilotApp(rumps.App):
     def _set_status_from_queue(self, text: str) -> None:
         run_on_main(lambda: self._set_status(text), None)
 
+    def on_toggle_call_mic_muted(self, sender: rumps.MenuItem) -> None:
+        sender.state = not bool(getattr(sender, "state", 0))
+        muted = bool(sender.state)
+        set_call_mic_muted_runtime(muted)
+        if muted:
+            notify(
+                "Copilot",
+                "Свои вопросы",
+                "⌘↩ отвечает и на [Я] (микрофон на созвоне выключен).",
+            )
+        else:
+            notify(
+                "Copilot",
+                "Свои вопросы",
+                "⌘↩ снова только на [Интервьюер], если он есть в транскрипте.",
+            )
+
     def on_clear_transcript(self, _: object) -> None:
         clear_dialogue()
         if interview_active():
@@ -464,18 +484,23 @@ class CopilotApp(rumps.App):
         if self._answer_busy:
             notify("Copilot", "Подожди", "Уже идёт ответ (⌘↩). Скриншоты не мешают.")
             return
-        if not last_interviewer_line():
-            notify(
-                "Copilot",
-                "Нет вопроса",
-                "Сначала реплика [Интервьюер] (STT, Telegram или меню).",
-            )
-            if interview_active():
-                sys.stdout.write(
+        if not last_answer_line():
+            if answer_self_questions_active():
+                hint = "Сначала реплика [Интервьюер] или [Я] (STT, Telegram, меню)."
+                term_hint = (
+                    "\n[copilot] Нет вопроса для ⌘↩ — дождись STT или ⌘G и новую реплику\n"
+                )
+            else:
+                hint = "Сначала реплика [Интервьюер] (STT, Telegram или меню)."
+                term_hint = (
                     "\n[copilot] Нет вопроса для ⌘↩ — дождись STT/Telegram "
                     "или ⌘G и новую реплику интервьюера\n"
-                    "(микрофон мог записать только [Я] без нового вопроса)\n\n"
+                    "(микрофон мог записать только [Я] — включи «Микрофон на созвоне выкл» "
+                    "или соло без [Интервьюер])\n\n"
                 )
+            notify("Copilot", "Нет вопроса", hint)
+            if interview_active():
+                sys.stdout.write(term_hint)
                 sys.stdout.flush()
             return
         self._answer_busy = True
@@ -499,7 +524,7 @@ class CopilotApp(rumps.App):
         try:
             result = dispatch_answer()
             text = (result.get("text") or result.get("raw") or "").strip()
-            question = last_interviewer_line() or ""
+            question = last_answer_line() or ""
             provider = result.get("provider") or answer_provider()
             model = result.get("model") or ""
             if text and question and not result.get("terminal"):
@@ -573,15 +598,12 @@ class CopilotApp(rumps.App):
         subprocess_open.run(["open", str(TRANSCRIPT_PATH)], check=False)
 
     def on_quit(self, _: object) -> None:
-        set_interview_active(False)
+        self._end_interview_session()
         try:
             cancel_active_sdk()
         except Exception:
             pass
-        self._answer_busy = False
-        self._stop_all_audio()
         self._stop_telegram_input()
-        self._stop_hotkey()
         self._stop_screenshot_pipeline()
         shutdown_resources()
         self._lock.release()
@@ -645,8 +667,9 @@ copilot — macOS menubar sidecar
 Остановка: меню «CP» → Выход (надёжнее, чем Ctrl+C). Зависший процесс: kill $(cat data/sidecar.lock)
 Повторный запуск, пока sidecar жив, завершится с ошибкой.
 
-Hotkeys (после «Начать интервью»): ⌘↩ — ответ, ⌘G — очистить transcript.
+Hotkeys: ⌘↩ — ответ, ⌘G — очистить transcript. Сессия с запуска copilot.
 Скриншот: ⌘⌃⇧4 → буфер; SCREENSHOT_SOLVE_ENABLED=1 — авто-решение в терминал.
+Выход: CP → Выход или Ctrl+C в терминале.
 
 Проверка, что вызывается наш бинарник:
   which copilot   # должен быть …/_copilot/.venv/bin/copilot
@@ -675,29 +698,27 @@ def main() -> int:
 
     print(
         "Copilot sidecar запущен. Иконка «CP» в menubar (справа). "
-        "Терминал занят, пока sidecar работает. Выход: CP → Выход "
-        "(Ctrl+C может не сработать в GUI-режиме).",
+        "Сессия интервью активна. Выход: CP → Выход или Ctrl+C.",
         flush=True,
     )
     print(
-        "[copilot] CP → Начать интервью; ⌘↩ ответ; ⌘G очистить; "
-        "⌘⌃⇧4 скриншот → data/last-screenshot-answer.md "
-        "(SCREENSHOT_SOLVE_ENABLED=1 — авто)",
+        "[copilot] ⌘↩ ответ; ⌘G очистить transcript; "
+        "⌘⌃⇧4 скриншот (SCREENSHOT_SOLVE_ENABLED=1 — авто); "
+        "CP → Начать прослушивание для STT",
         flush=True,
     )
 
+    app = CopilotApp(lock)
+
     def _quit_on_signal(*_args: object) -> None:
-        cancel_active_sdk()
-        shutdown_resources()
-        lock.release()
         print("\nВыход (Ctrl+C).", flush=True)
-        os._exit(0)
+        run_on_main(app.on_quit, None)
 
     signal.signal(signal.SIGINT, _quit_on_signal)
     signal.signal(signal.SIGTERM, _quit_on_signal)
 
     try:
-        CopilotApp(lock).run()
+        app.run()
     except Exception as exc:
         lock.release()
         print(f"Ошибка запуска sidecar: {exc}", file=sys.stderr, flush=True)

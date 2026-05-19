@@ -387,18 +387,109 @@ async function cmdStart() {
   }
 }
 
-function lastInterviewerQuestion(transcript) {
+function envOn(name, defaultOn = false) {
+  const v = (process.env[name] ?? "").trim().toLowerCase();
+  if (!v) return defaultOn;
+  return ["1", "true", "yes", "on"].includes(v);
+}
+
+function answerSelfQuestionsActive(transcript) {
+  const mode = (process.env.ANSWER_SELF_QUESTIONS || "auto").toLowerCase();
+  if (["0", "false", "no", "never"].includes(mode)) return false;
+  if (["1", "true", "yes", "always"].includes(mode)) return true;
+  if (envOn("CALL_MIC_MUTED")) return true;
+  const listenIv = (process.env.AUDIO_ENABLE_INTERVIEWER ?? "1").toLowerCase();
+  if (["0", "false", "no"].includes(listenIv)) return true;
   const dialogue = dialogueLines(transcript);
+  return !dialogue.some((l) => l.startsWith("[Интервьюер]:"));
+}
+
+function mergedBlockFromEnd(dialogue, prefix, otherPrefix, maxParts = null) {
   if (!dialogue.length) return "";
   let i = dialogue.length - 1;
-  while (i >= 0 && dialogue[i].startsWith("[Я]:")) i -= 1;
-  if (i < 0) return "";
+  while (i >= 0 && dialogue[i].startsWith(otherPrefix)) i -= 1;
+  if (i < 0 || !dialogue[i].startsWith(prefix)) return "";
   const parts = [];
-  while (i >= 0 && dialogue[i].startsWith("[Интервьюер]:")) {
-    parts.unshift(dialogue[i].replace(/^\[Интервьюер\]:\s*/, "").trim());
+  const re =
+    prefix === "[Интервьюер]:"
+      ? /^\[Интервьюер\]:\s*/
+      : /^\[Я\]:\s*/;
+  while (i >= 0 && dialogue[i].startsWith(prefix)) {
+    const text = dialogue[i].replace(re, "").trim();
+    if (text) parts.unshift(text);
     i -= 1;
+    if (maxParts != null && parts.length >= maxParts) break;
   }
-  return parts.filter(Boolean).join(" ");
+  return parts.join(" ");
+}
+
+function lastInterviewerQuestion(transcript) {
+  const dialogue = dialogueLines(transcript);
+  const cap = envInt("ANSWER_INTERVIEWER_MERGE_MAX", 2);
+  return mergedBlockFromEnd(dialogue, "[Интервьюер]:", "[Я]:", cap);
+}
+
+function lastSelfQuestion(transcript) {
+  const dialogue = dialogueLines(transcript);
+  const cap = envInt("ANSWER_SELF_MERGE_MAX", 3);
+  return mergedBlockFromEnd(dialogue, "[Я]:", "[Интервьюер]:", cap);
+}
+
+function lastDialogueQuestion(transcript) {
+  const dialogue = dialogueLines(transcript);
+  if (!dialogue.length) return { text: "", speaker: "" };
+  const last = dialogue[dialogue.length - 1];
+  if (last.startsWith("[Я]:")) {
+    const text = lastSelfQuestion(transcript);
+    return { text, speaker: text ? "self" : "" };
+  }
+  if (last.startsWith("[Интервьюер]:")) {
+    const text = lastInterviewerQuestion(transcript);
+    return { text, speaker: text ? "interviewer" : "" };
+  }
+  return { text: "", speaker: "" };
+}
+
+const SPURIOUS_IV_RE =
+  /^(?:сказать\??|да\b|алло\??|угу\.?|ага\.?|ну\b|слушаю\.?|повтори\.?|можно\??|так\??)\s*$/i;
+
+function isSpuriousInterviewerFragment(text) {
+  const t = text.trim();
+  if (!t) return true;
+  if (SPURIOUS_IV_RE.test(t)) return true;
+  const words = t.split(/\s+/);
+  if (t.length <= 22 && words.length <= 3 && t.endsWith("?")) {
+    const low = t.toLowerCase().replace(/\?+$/, "");
+    if (["сказать", "да", "алло", "ну", "так", "можно"].includes(low)) return true;
+  }
+  return false;
+}
+
+function selfOverridesInterviewer(interviewer, selfText) {
+  const s = selfText.trim();
+  const i = interviewer.trim();
+  if (s.length < 10) return false;
+  if (isSpuriousInterviewerFragment(i)) return true;
+  if (i.length < s.length * 0.45 && s.split(/\s+/).length >= i.split(/\s+/).length + 2) {
+    return true;
+  }
+  return false;
+}
+
+function lastAnswerTarget(transcript) {
+  if (answerSelfQuestionsActive(transcript)) {
+    const { text, speaker } = lastDialogueQuestion(transcript);
+    return text ? { text, speaker } : { text: "", speaker: "" };
+  }
+  const iv = lastInterviewerQuestion(transcript);
+  const self = lastSelfQuestion(transcript);
+  if (self && iv && selfOverridesInterviewer(iv, self)) {
+    return { text: self, speaker: "self" };
+  }
+  if (self && !iv) return { text: self, speaker: "self" };
+  if (iv) return { text: iv, speaker: "interviewer" };
+  if (self) return { text: self, speaker: "self" };
+  return { text: "", speaker: "" };
 }
 
 function dialogueLines(transcript) {
@@ -422,13 +513,17 @@ function compactDialogueContext(transcript, maxChars) {
   return picked.join("\n");
 }
 
-function buildAnswerPrompt(transcript, lastInterviewer) {
+function buildAnswerPrompt(transcript, question, speaker) {
+  const qLabel =
+    speaker === "self"
+      ? "Мой вопрос (соло или микрофон на созвоне выключен)"
+      : "Вопрос интервьюера";
   const minimal = envBool("CURSOR_ANSWER_MINIMAL");
   if (minimal) {
     return `${INTERVIEW_SYSTEM}
 
-Вопрос интервьюера:
-${lastInterviewer}
+${qLabel}:
+${question}
 
 Ответь кратко для озвучивания вслух.`;
   }
@@ -441,10 +536,10 @@ ${lastInterviewer}
 
   return `${INTERVIEW_SYSTEM}
 
-Ответь на последний вопрос интервьюера (кратко, для озвучивания вслух).
+Ответь на последний вопрос (кратко, для озвучивания вслух).
 
-Вопрос:
-${lastInterviewer}${ctxBlock}`;
+${qLabel}:
+${question}${ctxBlock}`;
 }
 
 function isAgentNotFound(err) {
@@ -492,13 +587,13 @@ async function cmdAnswer() {
   if (existsSync(transcriptPath)) {
     transcript = readFileSync(transcriptPath, "utf8");
   }
-  const lastInterviewer = lastInterviewerQuestion(transcript);
-  if (!lastInterviewer) {
-    console.error("No interviewer question in data/transcript.md");
+  const { text: question, speaker } = lastAnswerTarget(transcript);
+  if (!question) {
+    console.error("No question in data/transcript.md");
     process.exit(1);
   }
 
-  const prompt = buildAnswerPrompt(transcript, lastInterviewer);
+  const prompt = buildAnswerPrompt(transcript, question, speaker);
   console.error(
     `[cursor-agent] answer: resume ${state.agentId}, model=${modelLabel()}, prompt≈${prompt.length} chars`,
   );

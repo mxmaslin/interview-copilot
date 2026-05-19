@@ -71,6 +71,36 @@ def audio_listen_self() -> bool:
     return _env("AUDIO_ENABLE_SELF", "1").lower() not in ("0", "false", "no")
 
 
+def answer_self_questions_mode() -> str:
+    """
+    Когда отвечать на реплики [Я] по ⌘↩.
+    auto — соло (нет [Интервьюер] в транскрипте), CALL_MIC_MUTED=1
+         или AUDIO_ENABLE_INTERVIEWER=0;
+    always | never.
+    """
+    return _env("ANSWER_SELF_QUESTIONS", "auto").lower()
+
+
+def call_mic_muted_on_call() -> bool:
+    """Микрофон выключен в Zoom/Telegram — отвечать и на свои вопросы ([Я])."""
+    return _env("CALL_MIC_MUTED", "0").lower() in ("1", "true", "yes")
+
+
+def answer_interviewer_merge_max() -> int:
+    """Сколько последних сегментов [Интервьюер] склеивать (BlackHole иначе тащит весь звонок)."""
+    try:
+        return max(1, int(_env("ANSWER_INTERVIEWER_MERGE_MAX", "2")))
+    except ValueError:
+        return 2
+
+
+def answer_self_merge_max() -> int:
+    try:
+        return max(1, int(_env("ANSWER_SELF_MERGE_MAX", "3")))
+    except ValueError:
+        return 3
+
+
 def telegram_input_enabled() -> bool:
     return _env("TELEGRAM_INPUT_ENABLED", "0").lower() not in ("0", "false", "no")
 

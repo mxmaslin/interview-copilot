@@ -167,7 +167,7 @@ def _run_node(command: str, *extra: str, timeout: int = _TIMEOUT_START) -> dict:
     except subprocess.TimeoutExpired:
         cancel_active_sdk()
         raise CursorBridgeError(
-            f"Таймаут Cursor SDK ({timeout} с). Закрой зависший Agent в Cursor или жми «Закончить интервью»."
+            f"Таймаут Cursor SDK ({timeout} с). Закрой зависший Agent в Cursor или CP → Выход."
         ) from None
     finally:
         with _proc_lock:
@@ -278,7 +278,7 @@ def _run_node_stream(
     except subprocess.TimeoutExpired:
         cancel_active_sdk()
         raise CursorBridgeError(
-            f"Таймаут Cursor SDK ({timeout} с). Закрой зависший Agent в Cursor или жми «Закончить интервью»."
+            f"Таймаут Cursor SDK ({timeout} с). Закрой зависший Agent в Cursor или CP → Выход."
         ) from None
     finally:
         with _proc_lock:
