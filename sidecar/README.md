@@ -1,10 +1,10 @@
 # Copilot sidecar
 
-macOS menubar: STT, **Telegram-бот** (polling с запуска `copilot`), `data/transcript.md`. Hotkeys: `⌘↩`, `⌘G`, **`⌘⌃⇧4`** (очередь скринов). **⌘↩** и скрины параллельно при `ANSWER_PROVIDER=deepseek` + `SCREENSHOT_ANSWER_PROVIDER=cursor`. Зависший процесс: `../scripts/kill-sidecar.sh`.
+macOS menubar **CP**: с запуска `copilot` — сессия интервью, `⌘↩` / `⌘G`, сброс транскрипта. STT и Telegram — по пунктам меню. Hotkeys: **`⌘⌃⇧4`** (очередь скринов). **⌘↩** и скрины параллельно при `deepseek` + `cursor` для vision.
 
-Доки: `../docs/audio-setup.md`, `../docs/telegram-input.md`, `../docs/screenshot-solve.md`.
+Доки: [copilot-workflow.md](../docs/copilot-workflow.md), [audio-setup.md](../docs/audio-setup.md), [telegram-input.md](../docs/telegram-input.md), [screenshot-solve.md](../docs/screenshot-solve.md).
 
-Опционально: Agents chatId (`cursor_ide_chat.py`), Cursor SDK (`scripts/cursor-agent`) для `ANSWER_PROVIDER=cursor`.
+Зависший процесс: `../scripts/kill-sidecar.sh`.
 
 ```bash
 pip install -e ".[audio,openai]"

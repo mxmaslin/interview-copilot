@@ -65,7 +65,7 @@ copilot
 python -m copilot
 ```
 
-**В терминале почти нет вывода** — sidecar это menubar-приложение; после старта смотри иконку **CP** справа в строке меню. Справка: `copilot --help`.
+**В терминале почти нет вывода** — sidecar это menubar-приложение; после старта смотри иконку **CP** справа. Сессия и **⌘↩** / **⌘G** активны сразу; STT — **CP → Начать прослушивание**. Шпаргалка: [docs/copilot-workflow.md](docs/copilot-workflow.md). Справка: `copilot --help`.
 
 Если `which copilot` показывает `~/.pyenv/shims/copilot`:
 

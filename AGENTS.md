@@ -21,6 +21,8 @@
 5. **`⌘⌃⇧4`** — скриншот в буфер → решение задачи в терминал (`SCREENSHOT_SOLVE_ENABLED=1`, см. `docs/screenshot-solve.md`).
 6. **Выход:** **CP → Выход** или **Ctrl+C** в терминале с `copilot` (или `./scripts/kill-sidecar.sh`).
 
+Шпаргалка по меню CP: [docs/copilot-workflow.md](docs/copilot-workflow.md).
+
 **Telegram:** бот = только **текст**; **звонок** = BlackHole + Multi-Output (см. `docs/telegram-input.md`). Звонок можно начать после «Начать прослушивание».
 
 **Agents в Cursor:** New Agent — только вручную в IDE. Sidecar **не** переключает фокус. Эксперимент: `CURSOR_AGENT_CHAT_ID` + `CURSOR_AGENT_MIRROR=1` в `.env` (push ответа в чат).
@@ -45,6 +47,8 @@
 - `ANSWER_REQUEST_TIMEOUT=120` — таймаут DeepSeek/OpenAI (сек), если меню CP «зависло» на ⌘↩.
 - `SCREENSHOT_SOLVE_ENABLED=1` — watcher буфера после ⌘⌃⇧4; `SCREENSHOT_ANSWER_PROVIDER` — переопределить vision-провайдер.
 - `CURSOR_MODEL=auto` — модель Cursor SDK из cli-config (`selectedModel`).
+- `ANSWER_SELF_QUESTIONS=auto` — ⌘↩ на `[Я]` при соло, `CALL_MIC_MUTED=1` или меню «Микрофон на созвоне выкл».
+- `ANSWER_INTERVIEWER_MERGE_MAX=2` — не склеивать весь звонок BlackHole в один вопрос.
 
 ## Формат ответов на вопросы интервьюера
 

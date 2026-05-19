@@ -36,6 +36,8 @@ Cursor **не умеет** сам слушать звук из Zoom / Meet. Не
 6. **`⌘⌃⇧4`** — очередь скринов → решение (`docs/screenshot-solve.md`); **не блокирует** ⌘↩ (DeepSeek + Cursor параллельно).
 7. **CP → Выход** или **Ctrl+C** в терминале.
 
+Меню и hotkeys: [docs/copilot-workflow.md](docs/copilot-workflow.md).
+
 ---
 
 ## Ограничения и контекст

@@ -658,22 +658,26 @@ class CopilotApp(rumps.App):
 
 
 _HELP = """\
-copilot — macOS menubar sidecar
+copilot — macOS menubar sidecar (CP)
 
 Запуск:
-  source .venv/bin/activate   # или: source scripts/activate-venv.sh
-  copilot
+  source scripts/activate-venv.sh
+  copilot                    # Terminal.app / iTerm
 
-После старта в menubar справа появится «CP». Терминал «молчит» — это нормально, процесс работает.
-Остановка: меню «CP» → Выход (надёжнее, чем Ctrl+C). Зависший процесс: kill $(cat data/sidecar.lock)
-Повторный запуск, пока sidecar жив, завершится с ошибкой.
+Сразу: сессия интервью, ⌘↩ / ⌘G, transcript сброшен.
+STT: CP → «Начать прослушивание (интервьюер + я)».
 
-Hotkeys: ⌘↩ — ответ, ⌘G — очистить transcript. Сессия с запуска copilot.
-Скриншот: ⌘⌃⇧4 → буфер; SCREENSHOT_SOLVE_ENABLED=1 — авто-решение в терминал.
-Выход: CP → Выход или Ctrl+C в терминале.
+Hotkeys:
+  ⌘↩     — ответ на последний вопрос → терминал + data/last-answer.md
+  ⌘G     — очистить transcript
+  ⌘⌃⇧4   — скриншот в буфер → vision (SCREENSHOT_SOLVE_ENABLED=1 — авто)
 
-Проверка, что вызывается наш бинарник:
-  which copilot   # должен быть …/_copilot/.venv/bin/copilot
+Меню CP: прослушивание, ответ, микрофон на созвоне выкл, скрин, файлы, выход.
+Подробнее: docs/copilot-workflow.md
+
+Выход: CP → Выход или Ctrl+C. Зависший: ./scripts/kill-sidecar.sh
+
+  which copilot   # …/_copilot/.venv/bin/copilot
 """
 
 
