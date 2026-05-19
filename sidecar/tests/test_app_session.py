@@ -69,6 +69,27 @@ def test_boot_bindings_starts_interview(monkeypatch) -> None:
     assert begun == [True]
 
 
+def test_menu_excludes_advanced_items() -> None:
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "copilot" / "app.py"
+    block = src.read_text(encoding="utf-8").split("self.menu = [", 1)[1].split(
+        "]", 1
+    )[0]
+    removed = (
+        "Привязать chatId Agents",
+        "Сбросить привязку chatId",
+        "Добавить реплику интервьюера",
+        "Добавить мою реплику",
+        "Отменить SDK запрос",
+        "Открыть Cursor-агента",
+    )
+    for label in removed:
+        assert label not in block
+    assert "Начать прослушивание (интервьюер + я)" in block
+    assert "Выход" in block
+
+
 def test_end_interview_session_stops_hotkeys(tmp_path, monkeypatch) -> None:
     app = _bare_app(monkeypatch)
     stopped: list[int] = []

@@ -118,8 +118,8 @@ def _warm_cursor_answer() -> None:
     if not resolve_bound_chat_id() and not load_agent_state():
         log(
             "[copilot] session warm: ⌘↩ (ANSWER_PROVIDER=cursor) — нет SDK-агента "
-            "(data/agent-state.json). Один раз: CP → «Привязать chatId…» "
-            "или: node scripts/cursor-agent/agent.mjs start"
+            "(data/agent-state.json). Один раз: "
+            "node scripts/cursor-agent/agent.mjs start"
         )
         return
     if warmup_answer_agent(block=True):

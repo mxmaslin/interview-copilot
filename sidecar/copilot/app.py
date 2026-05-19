@@ -105,12 +105,6 @@ class CopilotApp(rumps.App):
         self.menu = [
             rumps.MenuItem("Статус: ожидание", callback=None),
             None,
-            rumps.MenuItem("Привязать chatId Agents…", callback=self.on_bind_chat),
-            rumps.MenuItem("Сбросить привязку chatId", callback=self.on_clear_chat_bind),
-            None,
-            rumps.MenuItem("Добавить реплику интервьюера…", callback=self.on_add_interviewer),
-            rumps.MenuItem("Добавить мою реплику…", callback=self.on_add_self),
-            None,
             rumps.MenuItem("Начать прослушивание (интервьюер + я)", callback=self.on_listen_start),
             rumps.MenuItem("Остановить прослушивание", callback=self.on_listen_stop),
             None,
@@ -124,7 +118,6 @@ class CopilotApp(rumps.App):
                 "Решить скриншот из буфера (⌘⌃⇧4)",
                 callback=self.on_screenshot_solve,
             ),
-            rumps.MenuItem("Отменить SDK запрос", callback=self.on_cancel_sdk),
             None,
             rumps.MenuItem("Открыть data/transcript.md", callback=self.on_open_transcript),
             rumps.MenuItem("Открыть последний ответ", callback=self.on_open_last_answer),
@@ -132,7 +125,7 @@ class CopilotApp(rumps.App):
                 "Открыть ответ по скриншоту",
                 callback=self.on_open_last_screenshot_answer,
             ),
-            rumps.MenuItem("Открыть Cursor-агента", callback=self.on_open_cursor_agent),
+            None,
             rumps.MenuItem("Выход", callback=self.on_quit),
         ]
 

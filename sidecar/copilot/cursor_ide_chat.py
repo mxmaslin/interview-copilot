@@ -26,8 +26,7 @@ class CursorIdeChatError(RuntimeError):
 
 BIND_HELP = (
     "В Cursor: **Agents → _copilot → New Agent** (создаёт только пользователь).\n"
-    "Затем CP → «Привязать chatId…» и вставь UUID чата "
-    "(или `CURSOR_AGENT_CHAT_ID` в `.env`)."
+    "Задай `CURSOR_AGENT_CHAT_ID` в `.env` (UUID чата)."
 )
 
 

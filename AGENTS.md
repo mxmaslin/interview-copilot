@@ -15,7 +15,7 @@
 Интервью ведёт **menubar sidecar** (`copilot` в **Terminal.app** / iTerm), не фразы в чате:
 
 1. **`copilot`** → иконка **CP** в menubar; сессия интервью и `⌘↩` / `⌘G` **сразу**; **транскрипт сбрасывается** при старте.
-2. Реплики: STT (BlackHole + **Начать прослушивание**), текст в **Telegram-бота**, **CP → Добавить реплику…**, или `data/transcript.md`.
+2. Реплики: STT (BlackHole + **Начать прослушивание**), **Telegram-бот**, или правка `data/transcript.md`.
 3. **`⌘↩`** — в терминале **только вопрос и ответ** (ответ **по чанкам**, `TERMINAL_ANSWER_STREAM=1`) + `data/last-answer.md`.
 4. **`⌘G`** — очистить реплики `[Интервьюер]` и `[Я]` в `data/transcript.md` (новый вопрос с чистого листа).
 5. **`⌘⌃⇧4`** — скриншот в буфер → решение задачи в терминал (`SCREENSHOT_SOLVE_ENABLED=1`, см. `docs/screenshot-solve.md`).
@@ -23,7 +23,7 @@
 
 **Telegram:** бот = только **текст**; **звонок** = BlackHole + Multi-Output (см. `docs/telegram-input.md`). Звонок можно начать после «Начать прослушивание».
 
-**Agents в Cursor:** New Agent создаёт только пользователь. Sidecar **не** переключает фокус на Cursor. Опционально: `CURSOR_AGENT_CHAT_ID` + `CURSOR_AGENT_MIRROR=1` (эксперимент, push без смены окна).
+**Agents в Cursor:** New Agent — только вручную в IDE. Sidecar **не** переключает фокус. Эксперимент: `CURSOR_AGENT_CHAT_ID` + `CURSOR_AGENT_MIRROR=1` в `.env` (push ответа в чат).
 
 ## Провайдер ответа (`.env`)
 
