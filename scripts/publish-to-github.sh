@@ -15,22 +15,18 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 1
 fi
 
-VISIBILITY="${COPILOT_GITHUB_VISIBILITY:-private}"
+REPO_SLUG="${COPILOT_GITHUB_REPO:-mxmaslin/interview-copilot}"
+REMOTE_URL="https://github.com/${REPO_SLUG}.git"
 
-if git remote get-url origin >/dev/null 2>&1; then
-  echo "[publish] remote origin уже есть, push..."
-  git push -u origin main
-  gh repo view --web 2>/dev/null || true
-  exit 0
+if ! git remote get-url origin >/dev/null 2>&1; then
+  git remote add origin "${REMOTE_URL}"
+else
+  git remote set-url origin "${REMOTE_URL}"
 fi
 
-echo "[publish] Создаю репозиторий copilot (${VISIBILITY})..."
-gh repo create copilot \
-  --"${VISIBILITY}" \
-  --source=. \
-  --remote=origin \
-  --description="macOS menubar copilot for technical interviews (Cursor + STT)" \
-  --push
+echo "[publish] origin -> ${REMOTE_URL}"
+gh auth setup-git
+git push -u origin main
 
 echo "[publish] Готово:"
-gh repo view --json url -q .url
+gh repo view "${REPO_SLUG}" --json url -q .url
