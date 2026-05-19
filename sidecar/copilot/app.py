@@ -68,8 +68,10 @@ from .transcript import (
     set_call_mic_muted_runtime,
 )
 
-HOTKEY = "<cmd>+<enter>"
+HOTKEY = "<cmd>+<enter>"  # pynput GlobalHotKeys
 HOTKEY_CLEAR = "<cmd>+g"
+HOTKEY_LABEL = "⌘↩"
+HOTKEY_CLEAR_LABEL = "⌘G"
 
 
 class CopilotApp(rumps.App):
@@ -108,12 +110,18 @@ class CopilotApp(rumps.App):
             rumps.MenuItem("Начать прослушивание (интервьюер + я)", callback=self.on_listen_start),
             rumps.MenuItem("Остановить прослушивание", callback=self.on_listen_stop),
             None,
-            rumps.MenuItem(f"Ответ на последний вопрос ({HOTKEY})", callback=self.on_answer),
+            rumps.MenuItem(
+                f"Ответ на последний вопрос ({HOTKEY_LABEL})",
+                callback=self.on_answer,
+            ),
             rumps.MenuItem(
                 "Микрофон на созвоне выкл (свои вопросы)",
                 callback=self.on_toggle_call_mic_muted,
             ),
-            rumps.MenuItem(f"Очистить транскрипт ({HOTKEY_CLEAR})", callback=self.on_clear_transcript),
+            rumps.MenuItem(
+                f"Очистить транскрипт ({HOTKEY_CLEAR_LABEL})",
+                callback=self.on_clear_transcript,
+            ),
             rumps.MenuItem(
                 "Решить скриншот из буфера (⌘⌃⇧4)",
                 callback=self.on_screenshot_solve,
