@@ -19,3 +19,5 @@ data/last-screenshot-answer.md
 data/answers.log
 .vscode/zsh/.zsh_history
 .vscode/zsh/.zcompdump*
+context/resume.md
+резюме*.pdf
