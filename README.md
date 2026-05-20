@@ -96,8 +96,14 @@ DEEPSEEK_API_KEY=...
 CURSOR_API_KEY=...                # скриншоты и ANSWER_PROVIDER=cursor
 
 STT_PROVIDER=local
-WHISPER_MODEL_SIZE=medium         # fast/balanced; quality → large-v3
-WHISPER_PROMPT_MODE=general       # HR/созвон; interview — IT-термины
+STT_LATENCY=balanced              # fast | balanced | quality
+WHISPER_MODEL_SIZE=small          # fast/balanced; quality → large-v3
+WHISPER_PROMPT_MODE=tech          # tech — собес; general — HR; interview — макс. prompt
+WHISPER_BEAM_SIZE=5
+WHISPER_CONDITION_PREVIOUS=1
+WHISPER_PATIENCE=1.0
+WHISPER_TEMPERATURE=0,0.2
+ANSWER_AUTO=1                     # ответ после STT; ⌘↩ — сразу
 SCREENSHOT_SOLVE_ENABLED=1
 # SCREENSHOT_ANSWER_PROVIDER=anthropic   # см. docs/screenshot-solve.md
 TERMINAL_ANSWER_STREAM=1

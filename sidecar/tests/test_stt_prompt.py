@@ -26,5 +26,16 @@ def test_general_prompt_no_it_hallucination_bias(monkeypatch) -> None:
     monkeypatch.setenv("WHISPER_PROMPT_MODE", "general")
     p = interview_whisper_prompt()
     assert "GIL" not in p
-    assert "JSON" not in p
-    assert "дословн" in p.lower() or "разговор" in p.lower()
+    assert "Kafka" not in p
+    assert "латиниц" in p.lower()
+    assert "дословн" not in p.lower()
+
+
+def test_tech_prompt_latin_bias_without_word_list(monkeypatch) -> None:
+    monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.delenv("WHISPER_INITIAL_PROMPT", raising=False)
+    monkeypatch.setenv("WHISPER_PROMPT_MODE", "tech")
+    p = interview_whisper_prompt()
+    assert "латиниц" in p.lower()
+    assert "Kafka" not in p
+    assert "Redis" not in p

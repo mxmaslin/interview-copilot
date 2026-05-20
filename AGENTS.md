@@ -50,6 +50,7 @@
 - `ANSWER_SELF_QUESTIONS=auto` — ⌘↩ на `[Я]` при соло, `CALL_MIC_MUTED=1` или меню «Микрофон на созвоне выкл».
 - `ANSWER_SELF_MERGE_MAX=1` — для `[Я]` по умолчанию **один** последний сегмент (не склеивать серию разных вопросов); `>1` только если одна фраза режется STT на паузах.
 - `ANSWER_INTERVIEWER_MERGE_MAX=2` — не склеивать весь звонок BlackHole в один вопрос.
+- `ANSWER_AUTO=1` — ответ сразу после реплики в транскрипте; `ANSWER_AUTO_DELAY_SEC=0` — без задержки; **⌘↩** прерывает текущий ответ и запускает новый.
 
 ## Формат ответов (⌘↩ / транскрипт)
 
@@ -64,7 +65,7 @@
 - `[Интервьюер]:` — звук созвона (BlackHole) и/или **Telegram** (`TELEGRAM_INPUT_ENABLED=1`, см. `docs/telegram-input.md`); в терминал при `TERMINAL_SHOW_INTERVIEWER=1`; STT — **Начать прослушивание**
 - `[Я]:` — микрофон (`AUDIO_INPUT_SELF`); в терминал при `TERMINAL_SHOW_SELF=1`
 
-На **⌘↩** — последние сегменты с конца (`ANSWER_INTERVIEWER_MERGE_MAX=2`, не весь накопленный звонок): обычно `[Интервьюер]` (хвостовые `[Я]` после него не мешают). Также `[Я]` при соло / `CALL_MIC_MUTED=1` / меню «Микрофон на созвоне выкл» / `AUDIO_ENABLE_INTERVIEWER=0` — **только последняя** реплика `[Я]`, без склейки старых вопросов (`ANSWER_SELF_MERGE_MAX=1`). Старт `copilot` очищает `transcript.md`; внутри сессии — **⌘G**. STT: `STT_LATENCY`, `WHISPER_PROMPT_MODE=interview|general`. Ответ: терминал (stream) + `data/last-answer.md`.
+На **⌘↩** — последние сегменты с конца (`ANSWER_INTERVIEWER_MERGE_MAX=2`, не весь накопленный звонок): обычно `[Интервьюер]` (хвостовые `[Я]` после него не мешают). Также `[Я]` при соло / `CALL_MIC_MUTED=1` / меню «Микрофон на созвоне выкл» / `AUDIO_ENABLE_INTERVIEWER=0` — **только последняя** реплика `[Я]`, без склейки старых вопросов (`ANSWER_SELF_MERGE_MAX=1`). Старт `copilot` очищает `transcript.md`; внутри сессии — **⌘G**. STT: `STT_LATENCY=balanced` + `WHISPER_PROMPT_MODE=tech` (латиница для IT без списка брендов); `general` — HR; `interview` — длинный prompt. Декод: `WHISPER_BEAM_SIZE`, `WHISPER_CONDITION_PREVIOUS`, `WHISPER_PATIENCE`, `WHISPER_TEMPERATURE` — см. `docs/audio-setup.md`. Ответ: терминал (stream) + `data/last-answer.md`.
 
 **STT и скриншот:** скрин **⌘⌃⇧4** глушит микрофон, пока очередь скриншотов не пуста; затем STT снова включается, если было **Начать прослушивание**. **⌘↩** (в т.ч. после Telegram) **не блокируется** очередью скринов — ответ и скриншоты параллельно. **⌘↩** с `deepseek` STT не глушит. Telegram polling с момента запуска `copilot`. См. `docs/audio-setup.md`, `docs/telegram-input.md`.
 

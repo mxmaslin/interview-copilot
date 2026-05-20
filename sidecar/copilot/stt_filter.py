@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 
+from .stt_segment import is_prompt_echo_hallucination
+
 # Типичные галлюцинации faster-whisper на тишине/шуме (RU YouTube-субтитры).
 _HALLUCINATION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p, re.IGNORECASE)
@@ -10,6 +12,9 @@ _HALLUCINATION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"корректор\s+",
         r"субтитр(?:ы|ов)?\s+(?:создал|добавил|сделал)",
         r"продолжение\s+следует",
+        r"продолжен\w*\s+в\s+следующ",
+        r"расскажите\s+в\s+комментар",
+        r"подписывайтесь\s+на\s+канал",
         r"спасибо\s+за\s+внимание",
         r"полицейск\w*\s+музык",
         r"amara\.org",
@@ -27,6 +32,8 @@ def is_stt_hallucination(text: str) -> bool:
     if not t:
         return True
     if len(t) < 3:
+        return True
+    if is_prompt_echo_hallucination(t):
         return True
     for pat in _HALLUCINATION_PATTERNS:
         if pat.search(t):

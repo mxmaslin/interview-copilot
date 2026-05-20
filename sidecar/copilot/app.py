@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 from .config import (
     ANSWERS_PATH,
     DATA_DIR,
+    answer_auto_delay_sec,
+    answer_auto_enabled,
     answer_pause_audio,
     answer_provider,
     audio_device_hint_interviewer,
@@ -66,8 +68,11 @@ from .transcript import (
     append_line,
     clear_dialogue,
     last_answer_line,
+    last_answer_target_for_speaker,
     call_mic_muted_effective,
     init_call_mic_muted_from_disk,
+    pin_answer_speaker,
+    reset_call_mic_muted,
     set_call_mic_muted_runtime,
 )
 
@@ -92,6 +97,9 @@ class CopilotApp(rumps.App):
         )
         self._listening_active = False
         self._sdk_pause_depth = 0
+        self._auto_answer_timer: threading.Timer | None = None
+        self._auto_answer_timer_lock = threading.Lock()
+        self._auto_answer_speaker: str | None = None
         self._audio_interviewer = AudioListener(
             speaker="interviewer",
             device_hint=audio_device_hint_interviewer(),
@@ -190,6 +198,7 @@ class CopilotApp(rumps.App):
         notify("Copilot", "Интервью", f"⌘↩ ответ. ⌘G очистить. {hint}"[:180])
 
     def _end_interview_session(self) -> None:
+        self._cancel_auto_answer_timer()
         if self._answer_busy or self._screenshot_active():
             cancel_active_sdk()
         self._answer_busy = False
@@ -248,19 +257,26 @@ class CopilotApp(rumps.App):
         self._telegram.stop()
 
     def _on_transcript_interviewer(self, text: str) -> None:
-        if interview_active() and terminal_show_interviewer_stt():
-            print_interviewer_transcript(text)
-        append_line("interviewer", text)
+        def apply() -> None:
+            if interview_active() and terminal_show_interviewer_stt():
+                print_interviewer_transcript(text)
+            if append_line("interviewer", text):
+                self._schedule_auto_answer(speaker="interviewer")
+
+        run_on_main(apply)
 
     def _on_transcript_self(self, text: str) -> None:
-        if interview_active() and terminal_show_self_stt():
-            print_self_transcript(text)
-        append_line("self", text)
+        def apply() -> None:
+            line = append_line("self", text)
+            if not line:
+                return
+            shown = line.replace("[Я]:", "", 1).strip()
+            if interview_active() and terminal_show_self_stt():
+                print_self_transcript(shown)
+            notify("Транскрипт", "Я", shown[:100])
+            self._schedule_auto_answer(speaker="self")
 
-        def show() -> None:
-            notify("Транскрипт", "Я", text[:100])
-
-        run_on_main(show)
+        run_on_main(apply)
 
     def _stop_all_audio(self) -> None:
         self._audio_interviewer.stop()
@@ -500,11 +516,72 @@ class CopilotApp(rumps.App):
         else:
             notify("Copilot", "Транскрипт", "Реплики интервьюера и твои удалены")
 
-    def on_answer(self, _: object) -> None:
-        if self._answer_busy:
-            notify("Copilot", "Подожди", "Уже идёт ответ (⌘↩). Скриншоты не мешают.")
+    def _cancel_auto_answer_timer(self) -> None:
+        lock = getattr(self, "_auto_answer_timer_lock", None)
+        if lock is None:
             return
-        if not last_answer_line():
+        with lock:
+            timer = getattr(self, "_auto_answer_timer", None)
+            self._auto_answer_timer = None
+        if timer is not None:
+            timer.cancel()
+
+    def _schedule_auto_answer(self, *, speaker: str) -> None:
+        if not answer_auto_enabled():
+            return
+        if not self.session_active:
+            log("[copilot] auto-answer: пропуск (сессия не активна)")
+            return
+        if speaker not in ("interviewer", "self"):
+            return
+        self._cancel_auto_answer_timer()
+        self._auto_answer_speaker = speaker
+        log("[copilot] auto-answer: запланирован", speaker)
+        delay = answer_auto_delay_sec()
+
+        def fire() -> None:
+            with self._auto_answer_timer_lock:
+                self._auto_answer_timer = None
+            self._start_answer(source="auto")
+
+        if delay <= 0:
+            fire()
+            return
+        timer = threading.Timer(delay, lambda: run_on_main(fire, None))
+        timer.daemon = True
+        with self._auto_answer_timer_lock:
+            self._auto_answer_timer = timer
+        timer.start()
+
+    def on_answer(self, _: object) -> None:
+        self._cancel_auto_answer_timer()
+        self._auto_answer_speaker = None
+        self._start_answer(source="hotkey")
+
+    def _question_for_answer(self, *, source: str) -> str | None:
+        if source == "auto" and self._auto_answer_speaker:
+            target = last_answer_target_for_speaker(self._auto_answer_speaker)
+            return target[0] if target else None
+        return last_answer_line()
+
+    def _start_answer(self, *, source: str = "hotkey") -> None:
+        if self._answer_busy:
+            if source == "hotkey":
+                cancel_active_sdk()
+                self._answer_busy = False
+                self._resume_audio_if_needed()
+            else:
+                log("[copilot] auto-answer: пропуск (уже идёт ответ)")
+                return
+
+        auto_pin = source == "auto" and self._auto_answer_speaker
+        if auto_pin:
+            pin_answer_speaker(self._auto_answer_speaker)
+
+        question = self._question_for_answer(source=source)
+        if not question:
+            if auto_pin:
+                pin_answer_speaker(None)
             if call_mic_muted_effective():
                 hint = (
                     "Сначала твоя реплика [Я] (Начать прослушивание + микрофон Brio). "
@@ -530,7 +607,10 @@ class CopilotApp(rumps.App):
             if interview_active():
                 sys.stdout.write(term_hint)
                 sys.stdout.flush()
+            if source == "auto":
+                log("[copilot] auto-answer: нет вопроса для", self._auto_answer_speaker)
             return
+
         self._answer_busy = True
         if answer_pause_audio():
             self._pause_audio_for_sdk()
@@ -545,11 +625,21 @@ class CopilotApp(rumps.App):
             log("[copilot] answer: parallel with screenshot queue")
         else:
             self._set_status(f"генерация ({label})…")
-        log("[copilot] answer: provider=", provider)
+        if source == "auto" and self._auto_answer_speaker:
+            log(
+                "[copilot] auto-answer:",
+                self._auto_answer_speaker,
+                "provider=",
+                provider,
+            )
+        else:
+            log("[copilot] answer: provider=", provider)
         threading.Thread(target=self._answer_worker, daemon=True).start()
 
     def _answer_worker(self) -> None:
+        pin = self._auto_answer_speaker
         try:
+            pin_answer_speaker(pin)
             result = dispatch_answer()
             text = (result.get("text") or result.get("raw") or "").strip()
             question = last_answer_line() or ""
@@ -581,6 +671,9 @@ class CopilotApp(rumps.App):
                 self._resume_audio_if_needed()
 
             run_on_main(on_err)
+        finally:
+            pin_answer_speaker(None)
+            self._auto_answer_speaker = None
 
     def _log_answer(self, text: str) -> None:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -626,6 +719,7 @@ class CopilotApp(rumps.App):
         subprocess_open.run(["open", str(TRANSCRIPT_PATH)], check=False)
 
     def on_quit(self, _: object) -> None:
+        reset_call_mic_muted()
         self._end_interview_session()
         try:
             cancel_active_sdk()

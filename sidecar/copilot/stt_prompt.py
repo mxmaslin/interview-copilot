@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from .config import whisper_initial_prompt, whisper_prompt_mode
 
-# Нейтральный prompt — без IT-слов; иначе Whisper «додумывает» JSON, API, GIL на бытовой речи.
+# Короткий prompt — без перечисления брендов (не эхоится на тишине).
 _GENERAL = (
-    "Дословная транскрипция русской разговорной речи. "
-    "Не добавляй слов, которых не было в аудио."
+    "Русская разговорная речь. "
+    "Технические термины и имена продуктов — латиницей, не кириллицей."
 )
 
-# Для реального собеса — подсказка IT-терминов латиницей.
+# Собес / live coding: контекст IT без списка Kafka, Redis, …
+_TECH = (
+    "Техническое интервью, русская речь. "
+    "Библиотеки, протоколы, БД, очереди, инфраструктура — латиницей (English letters)."
+)
+
+# Максимум подсказок латиницей (длинный prompt, только режим interview).
 _INTERVIEW = (
     "Техническое интервью, русская речь, IT-термины латиницей: "
     "Python, GIL, asyncio, event loop, coroutine, generator, decorator, "
@@ -29,6 +35,9 @@ def interview_whisper_prompt() -> str:
     custom = whisper_initial_prompt()
     if custom:
         return custom
-    if whisper_prompt_mode() in ("general", "casual", "dialog"):
+    mode = whisper_prompt_mode()
+    if mode in ("general", "casual", "dialog"):
         return _GENERAL
+    if mode in ("tech", "it", "mixed"):
+        return _TECH
     return _INTERVIEW

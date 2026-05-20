@@ -18,25 +18,67 @@ from .transcript_rules import (
 
 _lock = threading.Lock()
 _call_mic_muted_runtime = False
+_pending_self_utterance: str | None = None
+_answer_speaker_pin: str | None = None
 
 
 def ensure_data_dir() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def append_line(speaker: str, text: str) -> str:
-    """speaker: 'interviewer' | 'self'"""
+def pending_self_utterance() -> str | None:
     with _lock:
-        ensure_data_dir()
-        label = "[Я]" if speaker == "self" else "[Интервьюер]"
-        line = f"{label}: {text.strip()}"
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        block = f"\n<!-- {ts} -->\n{line}\n"
-        if not TRANSCRIPT_PATH.exists():
-            TRANSCRIPT_PATH.write_text("# Interview transcript\n", encoding="utf-8")
-        with TRANSCRIPT_PATH.open("a", encoding="utf-8") as f:
-            f.write(block)
-        return line
+        return _pending_self_utterance
+
+
+def flush_pending_self_line() -> str | None:
+    """Записать буфер обрезанной реплики [Я] перед ⌘↩."""
+    global _pending_self_utterance
+    with _lock:
+        pending = _pending_self_utterance
+        if not pending:
+            return None
+        _pending_self_utterance = None
+        return _write_dialogue_line("self", pending)
+
+
+def _write_dialogue_line(speaker: str, text: str) -> str:
+    ensure_data_dir()
+    label = "[Я]" if speaker == "self" else "[Интервьюер]"
+    line = f"{label}: {text.strip()}"
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    block = f"\n<!-- {ts} -->\n{line}\n"
+    if not TRANSCRIPT_PATH.exists():
+        TRANSCRIPT_PATH.write_text("# Interview transcript\n", encoding="utf-8")
+    with TRANSCRIPT_PATH.open("a", encoding="utf-8") as f:
+        f.write(block)
+    return line
+
+
+def append_line(speaker: str, text: str) -> str | None:
+    """speaker: 'interviewer' | 'self'. None — реплика [Я] буферизована (обрезан STT)."""
+    from .stt_filter import is_stt_hallucination
+    from .stt_segment import (
+        is_incomplete_self_utterance,
+        merge_self_continuation,
+    )
+
+    global _pending_self_utterance
+    cleaned = (text or "").strip()
+    if not cleaned or is_stt_hallucination(cleaned):
+        return None
+
+    with _lock:
+        if speaker == "self":
+            if _pending_self_utterance:
+                cleaned = merge_self_continuation(_pending_self_utterance, cleaned)
+            if is_incomplete_self_utterance(cleaned):
+                _pending_self_utterance = cleaned
+                return None
+            _pending_self_utterance = None
+            return _write_dialogue_line("self", cleaned)
+        _pending_self_utterance = None
+        return _write_dialogue_line(speaker, cleaned)
 
 
 def _interviewer_text(line: str) -> str:
@@ -49,7 +91,9 @@ def _self_text(line: str) -> str:
 
 def clear_dialogue() -> None:
     """Удалить все реплики [Интервьюер] и [Я] из transcript.md."""
+    global _pending_self_utterance
     with _lock:
+        _pending_self_utterance = None
         ensure_data_dir()
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         TRANSCRIPT_PATH.write_text(
@@ -79,43 +123,33 @@ def has_self_lines() -> bool:
     return any(ln.startswith("[Я]:") for ln in dialogue_lines())
 
 
-def call_mic_muted_persisted() -> bool:
-    """Флаг из меню CP между перезапусками copilot."""
-    try:
-        return CALL_MIC_MUTED_FLAG.is_file()
-    except OSError:
-        return False
-
-
-def init_call_mic_muted_from_disk() -> bool:
-    """Восстановить состояние меню при старте sidecar."""
+def reset_call_mic_muted() -> None:
+    """Сброс меню «микрофон на созвоне выкл» (при старте/выходе copilot)."""
     global _call_mic_muted_runtime
-    _call_mic_muted_runtime = call_mic_muted_persisted()
-    return _call_mic_muted_runtime
-
-
-def set_call_mic_muted_runtime(value: bool) -> None:
-    """Меню CP: микрофон выключен на созвоне — отвечать на [Я]."""
-    global _call_mic_muted_runtime
-    _call_mic_muted_runtime = value
-    ensure_data_dir()
+    _call_mic_muted_runtime = False
     try:
-        if value:
-            CALL_MIC_MUTED_FLAG.write_text("1\n", encoding="utf-8")
-        elif CALL_MIC_MUTED_FLAG.exists():
+        if CALL_MIC_MUTED_FLAG.exists():
             CALL_MIC_MUTED_FLAG.unlink()
     except OSError:
         pass
 
 
+def init_call_mic_muted_from_disk() -> bool:
+    """При старте sidecar — всегда без галочки (не сохраняем между сессиями)."""
+    reset_call_mic_muted()
+    return False
+
+
+def set_call_mic_muted_runtime(value: bool) -> None:
+    """Меню CP: микрофон выключен на созвоне — отвечать на [Я]. Только на текущую сессию."""
+    global _call_mic_muted_runtime
+    _call_mic_muted_runtime = value
+
+
 def call_mic_muted_effective() -> bool:
     from .config import call_mic_muted_on_call
 
-    return (
-        call_mic_muted_on_call()
-        or _call_mic_muted_runtime
-        or call_mic_muted_persisted()
-    )
+    return call_mic_muted_on_call() or _call_mic_muted_runtime
 
 
 def answer_self_questions_active() -> bool:
@@ -229,8 +263,33 @@ def _self_overrides_interviewer(interviewer: str, self_text: str) -> bool:
     return False
 
 
+def pin_answer_speaker(speaker: str | None) -> None:
+    """Закрепить спикера для следующего ответа (авто-ответ после STT)."""
+    global _answer_speaker_pin
+    with _lock:
+        _answer_speaker_pin = speaker if speaker in ("interviewer", "self") else None
+
+
+def last_answer_target_for_speaker(speaker: str) -> tuple[str, str] | None:
+    """Вопрос для авто-ответа — по спикеру сегмента STT, без путаницы с [Я]."""
+    flush_pending_self_line()
+    if speaker == "interviewer":
+        q = last_interviewer_question()
+        return (q, "interviewer") if q else None
+    if speaker == "self":
+        q = last_self_question()
+        return (q, "self") if q else None
+    return None
+
+
 def last_answer_target() -> tuple[str, str] | None:
     """Цель для ⌘↩: (вопрос, speaker). speaker: interviewer | self."""
+    with _lock:
+        pin = _answer_speaker_pin
+    if pin:
+        return last_answer_target_for_speaker(pin)
+
+    flush_pending_self_line()
     if call_mic_muted_effective():
         self_q = last_self_question()
         return (self_q, "self") if self_q else None

@@ -26,7 +26,6 @@ import { Agent, CursorAgentError } from "@cursor/sdk";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
 const STATE_DIR = join(REPO_ROOT, "data");
-const CALL_MIC_MUTED_FLAG = join(STATE_DIR, "call-mic-muted");
 const TRANSCRIPT_RULES_PATH = join(
   REPO_ROOT,
   "sidecar/copilot/transcript_rules.json",
@@ -410,8 +409,7 @@ function envOn(name, defaultOn = false) {
 }
 
 function callMicMutedEffective() {
-  if (envOn("CALL_MIC_MUTED")) return true;
-  return existsSync(CALL_MIC_MUTED_FLAG);
+  return envOn("CALL_MIC_MUTED");
 }
 
 function answerSelfQuestionsActive(transcript) {

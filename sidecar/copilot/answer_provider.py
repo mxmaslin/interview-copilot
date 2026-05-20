@@ -288,7 +288,10 @@ def answer_via_deepseek() -> dict[str, Any]:
         raise AnswerProviderError(
             "ANSWER_PROVIDER=deepseek, но DEEPSEEK_API_KEY не задан в .env"
         )
-    question = last_answer_line() or ""
+    target = last_answer_target()
+    if not target:
+        raise AnswerProviderError(_no_question_error())
+    question, _speaker = target
     model = deepseek_answer_model()
 
     if terminal_answer_stream():

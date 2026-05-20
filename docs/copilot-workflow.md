@@ -19,8 +19,8 @@ copilot   # Terminal.app / iTerm, не терминал Cursor
 |--------|----------|
 | **Начать прослушивание** | STT: BlackHole (интервьюер) + микрофон (я) |
 | **Остановить прослушивание** | Выключить STT |
-| **Ответ на последний вопрос (⌘↩)** | DeepSeek / OpenAI / Cursor → терминал + `data/last-answer.md` |
-| **Микрофон на созвоне выкл** | ⌘↩ на **одну** последнюю реплику `[Я]` (не склеивать старые вопросы); `[Интервьюер]` игнорируется; флаг в `data/call-mic-muted` |
+| **Ответ на последний вопрос (⌘↩)** | Авто после STT (`ANSWER_AUTO=1`) — отдельно для `[Интервьюер]` и `[Я]`; ⌘↩ прерывает и перезапускает |
+| **Микрофон на созвоне выкл** | ⌘↩ на **одну** последнюю реплику `[Я]`; сбрасывается при выходе из copilot (не между ⌘↩ внутри сессии) |
 | **Очистить транскрипт (⌘G)** | Новый вопрос без старых реплик |
 | **Решить скриншот (⌘⌃⇧4)** | Vision из буфера (или авто-watcher) |
 | **Открыть transcript / ответы** | Файлы в редакторе |
@@ -62,6 +62,14 @@ ANSWER_PROVIDER=deepseek
 ANSWER_SELF_QUESTIONS=auto      # solo / CALL_MIC_MUTED / меню «микрофон выкл»
 ANSWER_SELF_MERGE_MAX=1         # [Я]: один сегмент; >1 — только если одна фраза рвётся на паузах
 ANSWER_INTERVIEWER_MERGE_MAX=2  # не склеивать весь звонок в один «вопрос»
+ANSWER_AUTO=1
+ANSWER_AUTO_DELAY_SEC=0         # 0 = сразу; ⌘↩ всегда немедленно
+STT_LATENCY=balanced
+WHISPER_PROMPT_MODE=tech        # собес; general — HR; interview — длинный prompt
+WHISPER_BEAM_SIZE=5
+WHISPER_CONDITION_PREVIOUS=1
+WHISPER_PATIENCE=1.0
+WHISPER_TEMPERATURE=0,0.2
 CALL_MIC_MUTED=0
 SCREENSHOT_SOLVE_ENABLED=1
 TELEGRAM_INPUT_ENABLED=1

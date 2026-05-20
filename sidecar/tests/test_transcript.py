@@ -166,7 +166,7 @@ def test_call_mic_muted_only_latest_self_not_merged(tmp_path, monkeypatch) -> No
     transcript.set_call_mic_muted_runtime(True)
 
     transcript.append_line("self", "Привет, слышишь меня?")
-    transcript.append_line("self", "Дословная транскрипция русской разговорной речи")
+    transcript.append_line("self", "Расскажи, что знаешь про...")
     transcript.append_line("self", "Как твоё настроение?")
 
     assert transcript.last_answer_target() == ("Как твоё настроение?", "self")

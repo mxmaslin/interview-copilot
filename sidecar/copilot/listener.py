@@ -83,9 +83,9 @@ class AudioListener:
 
         block = max(1, int(sr * audio_block_ms() / 1000.0))
         block_sec = block / sr
-        silence_limit = silence_seconds()
+        silence_limit = silence_seconds(speaker=self._speaker)
         min_speech = min_speech_seconds()
-        max_seg = max_segment_seconds()
+        max_seg = max_segment_seconds(speaker=self._speaker)
         rms_threshold = audio_rms_threshold(self._speaker)
 
         buf: list[np.ndarray] = []

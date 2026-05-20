@@ -7,7 +7,7 @@ def test_whisper_beam_balanced_preset(monkeypatch) -> None:
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
     monkeypatch.setenv("STT_LATENCY", "balanced")
     monkeypatch.delenv("WHISPER_BEAM_SIZE", raising=False)
-    assert config.whisper_beam_size() == 3
+    assert config.whisper_beam_size() == 5
 
 
 def test_whisper_prompt_mode_general(monkeypatch) -> None:

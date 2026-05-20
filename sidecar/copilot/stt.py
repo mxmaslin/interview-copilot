@@ -23,6 +23,8 @@ from .config import (
     whisper_cpu_threads,
     whisper_device,
     whisper_local_size,
+    whisper_patience,
+    whisper_temperature,
     whisper_vad_filter,
 )
 from .stt_glossary import apply_glossary_fixes
@@ -151,6 +153,21 @@ def _pcm_to_float32(pcm: np.ndarray) -> np.ndarray:
     return pcm.astype(np.float32) / 32768.0
 
 
+def _whisper_transcribe_kwargs() -> dict:
+    kwargs: dict = {
+        "beam_size": whisper_beam_size(),
+        "best_of": 1,
+        "vad_filter": whisper_vad_filter(),
+        "condition_on_previous_text": whisper_condition_on_previous(),
+        "without_timestamps": True,
+        "temperature": whisper_temperature(),
+    }
+    patience = whisper_patience()
+    if patience > 0:
+        kwargs["patience"] = patience
+    return kwargs
+
+
 def _transcribe_local(pcm: np.ndarray, sample_rate: int) -> str:
     model = _get_local_model()
     audio = _pcm_to_float32(pcm)
@@ -163,11 +180,7 @@ def _transcribe_local(pcm: np.ndarray, sample_rate: int) -> str:
         language="ru",
         task="transcribe",
         initial_prompt=prompt,
-        beam_size=whisper_beam_size(),
-        best_of=1,
-        vad_filter=whisper_vad_filter(),
-        condition_on_previous_text=whisper_condition_on_previous(),
-        without_timestamps=True,
+        **_whisper_transcribe_kwargs(),
     )
     parts = [seg.text.strip() for seg in segments if seg.text.strip()]
     return apply_glossary_fixes(" ".join(parts).strip())
@@ -181,11 +194,7 @@ def _transcribe_local_file(path: Path) -> str:
         language="ru",
         task="transcribe",
         initial_prompt=prompt,
-        beam_size=whisper_beam_size(),
-        best_of=1,
-        vad_filter=whisper_vad_filter(),
-        condition_on_previous_text=whisper_condition_on_previous(),
-        without_timestamps=True,
+        **_whisper_transcribe_kwargs(),
     )
     parts = [seg.text.strip() for seg in segments if seg.text.strip()]
     return apply_glossary_fixes(" ".join(parts).strip())

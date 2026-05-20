@@ -167,8 +167,8 @@ def whisper_local_size() -> str:
     if preset == "quality":
         return "large-v3"
     if preset == "balanced":
-        return "medium"
-    return "medium"  # fast: medium — лучше RU/HR речь на Apple Silicon
+        return "small"
+    return "small"
 
 
 def whisper_compute_type() -> str:
@@ -198,13 +198,44 @@ def whisper_beam_size() -> int:
     if preset == "quality":
         return 5
     if preset == "balanced":
-        return 3
-    return 1
+        return 5
+    return 3
+
+
+def whisper_patience() -> float:
+    """Beam search patience (>0 точнее на редких словах, чуть медленнее)."""
+    explicit = _env("WHISPER_PATIENCE")
+    if explicit:
+        try:
+            return max(0.0, float(explicit))
+        except ValueError:
+            pass
+    preset = stt_latency_preset()
+    if preset == "quality":
+        return 1.2
+    if preset == "balanced":
+        return 1.0
+    return 0.0
+
+
+def whisper_temperature() -> float | tuple[float, ...]:
+    """0.0 — жадно; (0.0, 0.2) — fallback при низкой уверенности (лучше EN-термины)."""
+    explicit = _env("WHISPER_TEMPERATURE")
+    if explicit:
+        parts = [p.strip() for p in explicit.split(",") if p.strip()]
+        if len(parts) > 1:
+            return tuple(float(p) for p in parts)
+        if parts:
+            return float(parts[0])
+    preset = stt_latency_preset()
+    if preset in ("balanced", "quality"):
+        return (0.0, 0.2)
+    return 0.0
 
 
 def whisper_prompt_mode() -> str:
-    """general — бытовая речь; interview — IT-термины в prompt (собес)."""
-    return _env("WHISPER_PROMPT_MODE", "general").lower()
+    """general | tech | interview — см. stt_prompt.py."""
+    return _env("WHISPER_PROMPT_MODE", "tech").lower()
 
 
 def whisper_initial_prompt() -> str:
@@ -218,11 +249,11 @@ def whisper_glossary_fixes() -> bool:
 
 
 def whisper_condition_on_previous() -> bool:
-    """Контекст между сегментами — лучше термины, чуть медленнее."""
+    """Контекст между сегментами — стабильнее латиница в терминах."""
     explicit = _env("WHISPER_CONDITION_PREVIOUS", "")
     if explicit:
         return explicit.lower() not in ("0", "false", "no")
-    return stt_latency_preset() == "quality"
+    return stt_latency_preset() != "fast"
 
 
 def whisper_vad_filter() -> bool:
@@ -239,7 +270,21 @@ def sample_rate() -> int:
         return 16000
 
 
-def silence_seconds() -> float:
+def silence_seconds(*, speaker: str = "interviewer") -> float:
+    if speaker == "self":
+        explicit_self = _env("AUDIO_SILENCE_SEC_SELF")
+        if explicit_self:
+            try:
+                return float(explicit_self)
+            except ValueError:
+                pass
+        preset = stt_latency_preset()
+        if preset == "quality":
+            return 1.1
+        if preset == "balanced":
+            return 0.85
+        return 0.72
+
     explicit = _env("AUDIO_SILENCE_SEC")
     if explicit:
         try:
@@ -268,8 +313,22 @@ def audio_block_ms() -> int:
         return 50
 
 
-def max_segment_seconds() -> float:
+def max_segment_seconds(*, speaker: str = "interviewer") -> float:
     """Макс. длина непрерывной речи без паузы — принудительный STT (0 = выкл)."""
+    if speaker == "self":
+        explicit_self = _env("AUDIO_MAX_SEGMENT_SEC_SELF")
+        if explicit_self:
+            try:
+                return float(explicit_self)
+            except ValueError:
+                pass
+        preset = stt_latency_preset()
+        if preset == "quality":
+            return 0.0
+        if preset == "balanced":
+            return 8.0
+        return 6.0
+
     explicit = _env("AUDIO_MAX_SEGMENT_SEC")
     if explicit:
         try:
@@ -286,6 +345,19 @@ def max_segment_seconds() -> float:
 
 def audio_prefer_16k() -> bool:
     return _env("AUDIO_PREFER_16K", "1").lower() not in ("0", "false", "no")
+
+
+def answer_auto_enabled() -> bool:
+    """После готовой реплики в транскрипте — ответ без ⌘↩."""
+    return _env("ANSWER_AUTO", "1").lower() not in ("0", "false", "no")
+
+
+def answer_auto_delay_sec() -> float:
+    """Пауза после STT перед авто-ответом (сбрасывается при новой реплике)."""
+    try:
+        return max(0.0, float(_env("ANSWER_AUTO_DELAY_SEC", "0.2")))
+    except ValueError:
+        return 0.2
 
 
 def answer_provider() -> str:
