@@ -18,6 +18,7 @@ data/last-answer.md
 data/last-screenshot-answer.md
 data/answers.log
 data/sessions/
+data/call-mic-muted
 .vscode/zsh/.zsh_history
 .vscode/zsh/.zcompdump*
 context/resume.md

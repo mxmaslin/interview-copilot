@@ -66,6 +66,8 @@ from .transcript import (
     append_line,
     clear_dialogue,
     last_answer_line,
+    call_mic_muted_effective,
+    init_call_mic_muted_from_disk,
     set_call_mic_muted_runtime,
 )
 
@@ -162,6 +164,8 @@ class CopilotApp(rumps.App):
             self._start_clipboard_watcher()
         if telegram_input_enabled():
             self._start_telegram_input()
+        init_call_mic_muted_from_disk()
+        self._sync_call_mic_menu_state()
         from .session_warmup import warmup_session
 
         warmup_session()
@@ -461,6 +465,16 @@ class CopilotApp(rumps.App):
     def _set_status_from_queue(self, text: str) -> None:
         run_on_main(lambda: self._set_status(text), None)
 
+    def _sync_call_mic_menu_state(self) -> None:
+        menu = getattr(self, "menu", None)
+        if not menu:
+            return
+        try:
+            mic_item = menu["Микрофон на созвоне выкл (свои вопросы)"]
+        except (KeyError, TypeError):
+            return
+        mic_item.state = 1 if call_mic_muted_effective() else 0
+
     def on_toggle_call_mic_muted(self, sender: rumps.MenuItem) -> None:
         sender.state = not bool(getattr(sender, "state", 0))
         muted = bool(sender.state)
@@ -491,7 +505,15 @@ class CopilotApp(rumps.App):
             notify("Copilot", "Подожди", "Уже идёт ответ (⌘↩). Скриншоты не мешают.")
             return
         if not last_answer_line():
-            if answer_self_questions_active():
+            if call_mic_muted_effective():
+                hint = (
+                    "Сначала твоя реплика [Я] (Начать прослушивание + микрофон Brio). "
+                    "Старый [Интервьюер] в транскрипте не используется — ⌘G при необходимости."
+                )
+                term_hint = (
+                    "\n[copilot] Нет [Я] для ⌘↩ — включено «микрофон на созвоне выкл»\n"
+                )
+            elif answer_self_questions_active():
                 hint = "Сначала реплика [Интервьюер] или [Я] (STT, Telegram, меню)."
                 term_hint = (
                     "\n[copilot] Нет вопроса для ⌘↩ — дождись STT или ⌘G и новую реплику\n"

@@ -26,6 +26,7 @@ import { Agent, CursorAgentError } from "@cursor/sdk";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
 const STATE_DIR = join(REPO_ROOT, "data");
+const CALL_MIC_MUTED_FLAG = join(STATE_DIR, "call-mic-muted");
 const TRANSCRIPT_RULES_PATH = join(
   REPO_ROOT,
   "sidecar/copilot/transcript_rules.json",
@@ -408,11 +409,16 @@ function envOn(name, defaultOn = false) {
   return ["1", "true", "yes", "on"].includes(v);
 }
 
+function callMicMutedEffective() {
+  if (envOn("CALL_MIC_MUTED")) return true;
+  return existsSync(CALL_MIC_MUTED_FLAG);
+}
+
 function answerSelfQuestionsActive(transcript) {
   const mode = (process.env.ANSWER_SELF_QUESTIONS || "auto").toLowerCase();
   if (["0", "false", "no", "never"].includes(mode)) return false;
   if (["1", "true", "yes", "always"].includes(mode)) return true;
-  if (envOn("CALL_MIC_MUTED")) return true;
+  if (callMicMutedEffective()) return true;
   const listenIv = (process.env.AUDIO_ENABLE_INTERVIEWER ?? "1").toLowerCase();
   if (["0", "false", "no"].includes(listenIv)) return true;
   const dialogue = dialogueLines(transcript);
@@ -499,6 +505,10 @@ function selfOverridesInterviewer(interviewer, selfText) {
 }
 
 function lastAnswerTarget(transcript) {
+  if (callMicMutedEffective()) {
+    const text = lastSelfQuestion(transcript);
+    return text ? { text, speaker: "self" } : { text: "", speaker: "" };
+  }
   if (answerSelfQuestionsActive(transcript)) {
     const { text, speaker } = lastDialogueQuestion(transcript);
     return text ? { text, speaker } : { text: "", speaker: "" };

@@ -2,7 +2,18 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 import copilot.transcript as transcript
+
+
+@pytest.fixture(autouse=True)
+def _isolated_call_mic_muted(tmp_path, monkeypatch) -> None:
+    """Не читать data/call-mic-muted с диска пользователя между тестами."""
+    monkeypatch.setattr(
+        transcript, "CALL_MIC_MUTED_FLAG", tmp_path / "call-mic-muted"
+    )
+    transcript.set_call_mic_muted_runtime(False)
 
 
 def test_append_line_interviewer(tmp_path, monkeypatch) -> None:
@@ -130,6 +141,7 @@ def test_last_answer_target_interviewer_when_both(tmp_path, monkeypatch) -> None
     path = tmp_path / "transcript.md"
     monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
     monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(transcript, "call_mic_muted_effective", lambda: False)
     monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: True)
 
     transcript.append_line("interviewer", "Вопрос один")
@@ -140,6 +152,21 @@ def test_last_answer_target_interviewer_when_both(tmp_path, monkeypatch) -> None
         "Мой ответ Уточни про кэш",
         "self",
     )
+
+
+def test_call_mic_muted_ignores_trailing_interviewer(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    import copilot.config as cfg
+
+    monkeypatch.setattr(cfg, "call_mic_muted_on_call", lambda: False)
+    transcript.set_call_mic_muted_runtime(True)
+
+    transcript.append_line("self", "Расскажи про asyncio")
+    transcript.append_line("interviewer", "шум с BlackHole")
+
+    assert transcript.last_answer_target() == ("Расскажи про asyncio", "self")
 
 
 def test_self_overrides_spurious_interviewer(tmp_path, monkeypatch) -> None:
@@ -182,6 +209,23 @@ def test_last_answer_target_normal_interview(tmp_path, monkeypatch) -> None:
     transcript.append_line("self", "Мой вопрос себе")
 
     assert transcript.last_answer_target() == ("Про GIL", "interviewer")
+
+
+def test_last_answer_target_call_mic_muted_prefers_self(
+    tmp_path, monkeypatch
+) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    import copilot.config as cfg
+
+    monkeypatch.setattr(cfg, "call_mic_muted_on_call", lambda: False)
+    transcript.set_call_mic_muted_runtime(True)
+
+    transcript.append_line("interviewer", "Старый вопрос с созвона")
+    transcript.append_line("self", "Что такое декоратор")
+
+    assert transcript.last_answer_target() == ("Что такое декоратор", "self")
 
 
 def test_answer_self_active_when_no_interviewer(

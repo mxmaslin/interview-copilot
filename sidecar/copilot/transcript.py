@@ -5,6 +5,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from .config import DATA_DIR, TRANSCRIPT_PATH
+
+CALL_MIC_MUTED_FLAG = DATA_DIR / "call-mic-muted"
 from .transcript_rules import (
     self_override_length_ratio,
     self_override_min_self_len,
@@ -77,16 +79,43 @@ def has_self_lines() -> bool:
     return any(ln.startswith("[Я]:") for ln in dialogue_lines())
 
 
+def call_mic_muted_persisted() -> bool:
+    """Флаг из меню CP между перезапусками copilot."""
+    try:
+        return CALL_MIC_MUTED_FLAG.is_file()
+    except OSError:
+        return False
+
+
+def init_call_mic_muted_from_disk() -> bool:
+    """Восстановить состояние меню при старте sidecar."""
+    global _call_mic_muted_runtime
+    _call_mic_muted_runtime = call_mic_muted_persisted()
+    return _call_mic_muted_runtime
+
+
 def set_call_mic_muted_runtime(value: bool) -> None:
     """Меню CP: микрофон выключен на созвоне — отвечать на [Я]."""
     global _call_mic_muted_runtime
     _call_mic_muted_runtime = value
+    ensure_data_dir()
+    try:
+        if value:
+            CALL_MIC_MUTED_FLAG.write_text("1\n", encoding="utf-8")
+        elif CALL_MIC_MUTED_FLAG.exists():
+            CALL_MIC_MUTED_FLAG.unlink()
+    except OSError:
+        pass
 
 
 def call_mic_muted_effective() -> bool:
     from .config import call_mic_muted_on_call
 
-    return call_mic_muted_on_call() or _call_mic_muted_runtime
+    return (
+        call_mic_muted_on_call()
+        or _call_mic_muted_runtime
+        or call_mic_muted_persisted()
+    )
 
 
 def answer_self_questions_active() -> bool:
@@ -193,6 +222,10 @@ def _self_overrides_interviewer(interviewer: str, self_text: str) -> bool:
 
 def last_answer_target() -> tuple[str, str] | None:
     """Цель для ⌘↩: (вопрос, speaker). speaker: interviewer | self."""
+    if call_mic_muted_effective():
+        self_q = last_self_question()
+        return (self_q, "self") if self_q else None
+
     if answer_self_questions_active():
         return last_dialogue_question()
 
