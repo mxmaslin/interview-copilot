@@ -5,13 +5,21 @@ from copilot.stt import _whisper_transcribe_kwargs
 from copilot.transcript import merge_rolling_transcript
 
 
-def test_merge_rolling_transcript_combines_chunks() -> None:
+def test_merge_rolling_transcript_unrelated_partials_use_final() -> None:
+    """Rolling «расскажи про» + финал на другую тему — не склеивать (см. test_merge_rolling)."""
     merged = merge_rolling_transcript(
         ["расскажи про"],
         "Python и Kafka",
     )
-    assert "расскажи про" in merged
-    assert "Kafka" in merged
+    assert merged == "Python и Kafka"
+
+
+def test_merge_rolling_transcript_combines_related_chunks() -> None:
+    merged = merge_rolling_transcript(
+        ["расскажи про"],
+        "расскажи про Python и Kafka",
+    )
+    assert merged == "расскажи про Python и Kafka"
 
 
 def test_merge_rolling_prefers_final_when_superset() -> None:
