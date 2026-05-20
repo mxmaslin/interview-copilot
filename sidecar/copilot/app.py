@@ -65,6 +65,7 @@ from .interview_quiet import interview_active, log, set_interview_active
 from .stt_filter import is_stt_hallucination
 from .stt_live import (
     is_stt_noise_chunk,
+    live_differs_from_file,
     live_question_supersedes_file,
     sanitize_live_transcript,
 )
@@ -127,6 +128,7 @@ class CopilotApp(rumps.App):
         self._auto_answer_timer: threading.Timer | None = None
         self._auto_answer_timer_lock = threading.Lock()
         self._auto_answer_speaker: str | None = None
+        self._dispatch_target: tuple[str, str] | None = None
         self._rolling_interviewer: list[str] = []
         self._rolling_self: list[str] = []
         self._audio_interviewer = AudioListener(
@@ -374,33 +376,55 @@ class CopilotApp(rumps.App):
             return False
         return len(merged.split()) >= min_words
 
+    def _commit_live_target(
+        self, speaker: str, live: str
+    ) -> tuple[str, str] | None:
+        """Записать live rolling в transcript и вернуть (вопрос, speaker)."""
+        if not live or is_stt_hallucination(live):
+            return None
+        if speaker == "self":
+            line = commit_self_text_now(live, force=True)
+            if line:
+                self._rolling_self.clear()
+                clear_self_transcript_live()
+                return (line.replace("[Я]:", "", 1).strip(), "self")
+        else:
+            line = commit_interviewer_text_now(live, force=True)
+            if line:
+                self._rolling_interviewer.clear()
+                return (line.replace("[Интервьюер]:", "", 1).strip(), "interviewer")
+        return None
+
     def _resolve_hotkey_answer_target(self) -> tuple[str, str] | None:
-        """⌘↩: приоритет live rolling над устаревшей строкой в transcript.md."""
+        """⌘↩: live rolling важнее устаревшей строки в transcript.md (даже 2–3 слова)."""
         flush_pending_self_line()
         file_target = last_answer_target()
         file_q = file_target[0] if file_target else None
 
         self_live = self._merged_rolling("self")
-        if self_live and live_question_supersedes_file(file_q, self_live):
-            line = commit_self_text_now(self_live, force=True)
-            if line:
-                self._rolling_self.clear()
-                clear_self_transcript_live()
-                return (line.replace("[Я]:", "", 1).strip(), "self")
-
         iv_live = self._merged_rolling("interviewer")
-        if iv_live and live_question_supersedes_file(file_q, iv_live):
-            line = commit_interviewer_text_now(iv_live, force=True)
-            if line:
-                self._rolling_interviewer.clear()
-                return (line.replace("[Интервьюер]:", "", 1).strip(), "interviewer")
 
-        if self_live and not is_stt_hallucination(self_live):
-            line = commit_self_text_now(self_live, force=True)
-            if line:
-                self._rolling_self.clear()
-                clear_self_transcript_live()
-                return (line.replace("[Я]:", "", 1).strip(), "self")
+        # Соло / микрофон выкл — только [Я]
+        if call_mic_muted_effective() or (
+            answer_self_questions_active() and not iv_live
+        ):
+            if self_live and live_differs_from_file(file_q, self_live):
+                committed = self._commit_live_target("self", self_live)
+                if committed:
+                    return committed
+            return file_target if file_target and file_target[1] == "self" else (
+                (file_q, "self") if file_q else None
+            )
+
+        # Иначе: live интервьюера, если есть; иначе [Я] если отличается от файла
+        if iv_live and live_differs_from_file(file_q, iv_live):
+            committed = self._commit_live_target("interviewer", iv_live)
+            if committed:
+                return committed
+        if self_live and live_differs_from_file(file_q, self_live):
+            committed = self._commit_live_target("self", self_live)
+            if committed:
+                return committed
 
         return file_target
 
@@ -695,6 +719,29 @@ class CopilotApp(rumps.App):
         def fire() -> None:
             with self._auto_answer_timer_lock:
                 self._auto_answer_timer = None
+            sp = self._auto_answer_speaker
+            if sp == "self":
+                self_live = self._merged_rolling("self")
+                if self_live and live_question_supersedes_file(
+                    last_self_question(), self_live
+                ):
+                    log(
+                        "[copilot] auto-answer: пропуск — в live другой вопрос; "
+                        "⌘↩ или дождитесь финала STT"
+                    )
+                    return
+            elif sp == "interviewer":
+                from .transcript import last_interviewer_question
+
+                iv_live = self._merged_rolling("interviewer")
+                if iv_live and live_question_supersedes_file(
+                    last_interviewer_question(), iv_live
+                ):
+                    log(
+                        "[copilot] auto-answer: пропуск — в live другой вопрос; "
+                        "⌘↩ или дождитесь финала STT"
+                    )
+                    return
             self._start_answer(source="auto")
 
         if delay <= 0:
@@ -752,9 +799,13 @@ class CopilotApp(rumps.App):
         else:
             answer_target = last_answer_target()
 
+        self._dispatch_target = answer_target
         if answer_target:
             pin_answer_target(answer_target)
         question = answer_target[0] if answer_target else None
+        if source == "hotkey" and question and interview_active():
+            sys.stdout.write(f"\n[copilot] вопрос (⌘↩): {question[:200]}\n")
+            sys.stdout.flush()
         if question and is_stt_hallucination(question):
             log("[copilot] ответ пропущен: STT-галлюцинация:", question[:80])
             if interview_active():
@@ -833,8 +884,12 @@ class CopilotApp(rumps.App):
 
     def _answer_worker(self) -> None:
         pin = self._auto_answer_speaker
+        dispatch_target = self._dispatch_target
         try:
-            pin_answer_speaker(pin)
+            if dispatch_target:
+                pin_answer_target(dispatch_target)
+            elif pin:
+                pin_answer_speaker(pin)
             target = last_answer_target()
             speaker_tag = target[1] if target else ""
             begin_answer(
@@ -880,6 +935,7 @@ class CopilotApp(rumps.App):
             pin_answer_target(None)
             bind_answer_generation(None)
             self._auto_answer_speaker = None
+            self._dispatch_target = None
 
     def _log_answer(self, text: str) -> None:
         DATA_DIR.mkdir(parents=True, exist_ok=True)

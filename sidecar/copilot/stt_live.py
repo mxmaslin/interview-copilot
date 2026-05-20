@@ -63,6 +63,8 @@ def sanitize_live_transcript(text: str) -> str:
 
 def live_question_supersedes_file(file_question: str | None, live: str) -> bool:
     """Live rolling важнее последней строки в transcript.md."""
+    from difflib import SequenceMatcher
+
     live = sanitize_live_transcript(live)
     if not live or is_stt_hallucination(live):
         return False
@@ -71,8 +73,25 @@ def live_question_supersedes_file(file_question: str | None, live: str) -> bool:
     f = file_question.strip()
     if live == f:
         return False
-    if f in live and len(live) > len(f) + 12:
+    if f in live and len(live) > len(f) + 8:
         return True
-    if f not in live and len(live.split()) >= 4:
+    if live in f:
+        return False
+    live_words = len(live.split())
+    if "?" in live and live_words >= 2:
+        return True
+    if live_words >= 2 and SequenceMatcher(None, f.lower(), live.lower()).ratio() < 0.52:
+        return True
+    if f not in live and live_words >= 3:
         return True
     return False
+
+
+def live_differs_from_file(file_question: str | None, live: str) -> bool:
+    """Есть осмысленный live-текст, отличный от последней строки в файле."""
+    live = sanitize_live_transcript(live)
+    if not live or is_stt_hallucination(live):
+        return False
+    if not file_question:
+        return True
+    return live.strip() != file_question.strip()
