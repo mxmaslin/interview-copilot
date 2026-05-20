@@ -98,6 +98,19 @@ def append_line(speaker: str, text: str) -> str | None:
         return _write_dialogue_line(speaker, cleaned)
 
 
+def commit_self_text_now(text: str) -> str | None:
+    """Записать [Я] без ожидания «целой» реплики (⌘↩ и буфер rolling)."""
+    global _pending_self_utterance
+    from .stt_filter import is_stt_hallucination
+
+    cleaned = (text or "").strip()
+    if not cleaned or is_stt_hallucination(cleaned):
+        return None
+    with _lock:
+        _pending_self_utterance = None
+        return _write_dialogue_line("self", cleaned)
+
+
 def _interviewer_text(line: str) -> str:
     return line.replace("[Интервьюер]:", "", 1).strip()
 

@@ -12,5 +12,11 @@ def test_prompt_echo_hallucination() -> None:
     assert is_stt_hallucination("Продолжение в следующей части")
 
 
+def test_tech_prompt_echo_hallucination() -> None:
+    assert is_stt_hallucination(
+        "Техническое интервью, русская речь. Технический интервью, русская речь."
+    )
+
+
 def test_real_speech_passes() -> None:
     assert not is_stt_hallucination("Что такое GIL в Python?")

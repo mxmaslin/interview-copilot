@@ -247,6 +247,21 @@ _live_interviewer_line = ""
 _live_self_line = ""
 
 
+def clear_self_transcript_live() -> None:
+    """Сброс строки «Я (live)» после отброшенного STT."""
+    global _live_self_line
+    _live_self_line = ""
+    sys.stdout.write("\x1b[2K\r")
+    sys.stdout.flush()
+
+
+def clear_interviewer_transcript_live() -> None:
+    global _live_interviewer_line
+    _live_interviewer_line = ""
+    sys.stdout.write("\x1b[2K\r")
+    sys.stdout.flush()
+
+
 def print_interviewer_transcript_live(text: str, *, final: bool) -> None:
     """Rolling STT: частичный текст во время речи; final — завершённая реплика."""
     global _live_interviewer_line

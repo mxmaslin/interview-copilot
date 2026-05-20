@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .stt_segment import is_prompt_echo_hallucination
+from .stt_segment import is_prompt_echo_hallucination, is_whisper_tech_prompt_echo
 
 # Типичные галлюцинации faster-whisper на тишине/шуме (RU YouTube-субтитры).
 _HALLUCINATION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
@@ -34,6 +34,8 @@ def is_stt_hallucination(text: str) -> bool:
     if len(t) < 3:
         return True
     if is_prompt_echo_hallucination(t):
+        return True
+    if is_whisper_tech_prompt_echo(t):
         return True
     for pat in _HALLUCINATION_PATTERNS:
         if pat.search(t):

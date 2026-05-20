@@ -27,10 +27,40 @@ def is_prompt_echo_hallucination(text: str) -> bool:
     return bool(_PROMPT_ECHO_RE.search(t))
 
 
+def is_whisper_tech_prompt_echo(text: str) -> bool:
+    """Эхо initial_prompt (режим tech/general) на тишине — Whisper повторяет подсказку."""
+    t = re.sub(r"\s+", " ", (text or "").strip())
+    if len(t) < 10:
+        return False
+    low = t.lower()
+    if low.count("русская речь") >= 2:
+        return True
+    if low.count("техническ") >= 3 and "интервью" in low:
+        return True
+    if re.search(r"техническ\w*", low) and "интервью" in low and re.search(r"русск", low):
+        if len(t) < 160:
+            rest = low
+            for pat in (
+                r"техническ\w*,?\s*",
+                r"интервью,?\s*",
+                r"русская\s+речь\.?\s*",
+                r"технические\s+интервью,?\s*",
+            ):
+                rest = re.sub(pat, " ", rest)
+            rest = re.sub(r"\s+", " ", rest).strip(" ,.?…")
+            if len(rest) < 12:
+                return True
+    if "библиотек" in low and "латиниц" in low and len(t) < 130:
+        return True
+    if "русская разговорная речь" in low and len(t) < 100:
+        return True
+    return False
+
+
 def is_incomplete_self_utterance(text: str) -> bool:
     """Реплика обрезана — ждём продолжение с микрофона."""
     t = (text or "").strip()
-    if not t or is_prompt_echo_hallucination(t):
+    if not t or is_prompt_echo_hallucination(t) or is_whisper_tech_prompt_echo(t):
         return False
     if _INCOMPLETE_TAIL_RE.search(t):
         return True
@@ -61,7 +91,7 @@ def merge_self_continuation(previous: str, new: str) -> str:
         return nxt
     if not nxt:
         return prev
-    if is_prompt_echo_hallucination(nxt):
+    if is_prompt_echo_hallucination(nxt) or is_whisper_tech_prompt_echo(nxt):
         return prev
     if nxt.lower().startswith(prev.lower()[: min(12, len(prev))]):
         return nxt if len(nxt) >= len(prev) else prev

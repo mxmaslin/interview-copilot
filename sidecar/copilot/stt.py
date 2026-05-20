@@ -176,14 +176,15 @@ def _transcribe_local(pcm: np.ndarray, sample_rate: int, *, live: bool = False) 
     if sample_rate != 16000:
         audio = _resample_to_16k(audio, sample_rate)
 
-    prompt = interview_whisper_prompt()
-    segments, _ = model.transcribe(
-        audio,
+    # live: без initial_prompt — иначе на тишине/шуме Whisper зачитывает подсказку в terminal.
+    transcribe_kw: dict = dict(
         language="ru",
         task="transcribe",
-        initial_prompt=prompt,
         **_whisper_transcribe_kwargs(live=live),
     )
+    if not live:
+        transcribe_kw["initial_prompt"] = interview_whisper_prompt()
+    segments, _ = model.transcribe(audio, **transcribe_kw)
     parts = [seg.text.strip() for seg in segments if seg.text.strip()]
     text = " ".join(parts).strip()
     if live:
