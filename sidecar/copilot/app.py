@@ -61,28 +61,38 @@ from .cursor_ide_chat import (
 )
 from .interview_quiet import interview_active, log, set_interview_active
 from .stt_filter import is_stt_hallucination
+from .stt_live import (
+    is_stt_noise_chunk,
+    live_question_supersedes_file,
+    sanitize_live_transcript,
+)
 from .shutdown import shutdown_resources, suppress_resource_tracker_warning
 from .instance import SidecarLock
 from .audio_devices import AudioDeviceNotFoundError
 from .listener import AudioListener
 from .telegram_input import TelegramInputError, TelegramInterviewerInput
 from .main_thread import run_on_main
+from .answer_turn import bind_answer_generation, next_answer_generation
+from .pipeline_timing import begin_answer, finish_answer, note_stt_final, peek_timing_record
 from .notify import notify
 from .runtime_macos import ensure_info_plist
-from .session_archive import end_session, start_session
+from .session_archive import end_session, record_answer_turn, start_session
 from .transcript import (
     answer_self_questions_active,
     append_line,
+    commit_interviewer_text_now,
     commit_self_text_now,
     clear_dialogue,
     flush_pending_self_line,
     last_answer_line,
+    last_answer_target,
     last_answer_target_for_speaker,
     last_self_question,
     merge_rolling_transcript,
     call_mic_muted_effective,
     init_call_mic_muted_from_disk,
     pin_answer_speaker,
+    pin_answer_target,
     reset_call_mic_muted,
     set_call_mic_muted_runtime,
 )
@@ -99,6 +109,8 @@ class CopilotApp(rumps.App):
         self._lock = lock
         self.session_active = False
         self._answer_busy = False
+        self._answer_source = "hotkey"
+        self._answer_generation = 0
         self._hotkey_listener = None
         self._clipboard_watcher: ClipboardScreenshotWatcher | None = None
         self._screenshot_queue = ScreenshotQueue(
@@ -279,12 +291,16 @@ class CopilotApp(rumps.App):
     def _on_transcript_interviewer(self, text: str, *, final: bool = True) -> None:
         def apply() -> None:
             if not final:
+                chunk = (text or "").strip()
+                if not chunk or is_stt_noise_chunk(chunk):
+                    return
                 self._rolling_interviewer.append(text)
                 if interview_active() and terminal_show_interviewer_stt():
                     print_interviewer_transcript_live(text, final=False)
                 return
             merged = merge_rolling_transcript(self._rolling_interviewer, text)
             self._rolling_interviewer.clear()
+            note_stt_final("interviewer")
             if interview_active() and terminal_show_interviewer_stt():
                 print_interviewer_transcript_live(merged, final=True)
             if append_line("interviewer", merged):
@@ -296,7 +312,7 @@ class CopilotApp(rumps.App):
         def apply() -> None:
             if not final:
                 chunk = (text or "").strip()
-                if chunk and is_stt_hallucination(chunk):
+                if not chunk or is_stt_noise_chunk(chunk):
                     return
                 self._rolling_self.append(text)
                 if interview_active() and terminal_show_self_stt():
@@ -304,6 +320,7 @@ class CopilotApp(rumps.App):
                 return
             merged = merge_rolling_transcript(self._rolling_self, text)
             self._rolling_self.clear()
+            note_stt_final("self")
             line = append_line("self", merged)
             if not line:
                 if interview_active() and terminal_show_self_stt():
@@ -317,25 +334,41 @@ class CopilotApp(rumps.App):
 
         run_on_main(apply)
 
-    def _self_question_from_stt_buffers_for_hotkey(self) -> str | None:
-        """«Микрофон выкл»: [Я] может быть только в rolling, пока сегмент не финализирован."""
+    def _merged_rolling(self, speaker: str) -> str:
+        buf = self._rolling_self if speaker == "self" else self._rolling_interviewer
+        return sanitize_live_transcript(
+            merge_rolling_transcript(list(buf), "").strip()
+        )
+
+    def _resolve_hotkey_answer_target(self) -> tuple[str, str] | None:
+        """⌘↩: приоритет live rolling над устаревшей строкой в transcript.md."""
         flush_pending_self_line()
-        q = last_self_question()
-        if q:
-            return q
-        merged = merge_rolling_transcript(list(self._rolling_self), "").strip()
-        if not merged:
-            return None
-        if is_stt_hallucination(merged):
-            self._rolling_self.clear()
-            clear_self_transcript_live()
-            return None
-        line = commit_self_text_now(merged)
-        if not line:
-            return None
-        self._rolling_self.clear()
-        clear_self_transcript_live()
-        return line.replace("[Я]:", "", 1).strip()
+        file_target = last_answer_target()
+        file_q = file_target[0] if file_target else None
+
+        self_live = self._merged_rolling("self")
+        if self_live and live_question_supersedes_file(file_q, self_live):
+            line = commit_self_text_now(self_live, force=True)
+            if line:
+                self._rolling_self.clear()
+                clear_self_transcript_live()
+                return (line.replace("[Я]:", "", 1).strip(), "self")
+
+        iv_live = self._merged_rolling("interviewer")
+        if iv_live and live_question_supersedes_file(file_q, iv_live):
+            line = commit_interviewer_text_now(iv_live, force=True)
+            if line:
+                self._rolling_interviewer.clear()
+                return (line.replace("[Интервьюер]:", "", 1).strip(), "interviewer")
+
+        if self_live and not is_stt_hallucination(self_live):
+            line = commit_self_text_now(self_live, force=True)
+            if line:
+                self._rolling_self.clear()
+                clear_self_transcript_live()
+                return (line.replace("[Я]:", "", 1).strip(), "self")
+
+        return file_target
 
     def _stop_all_audio(self) -> None:
         self._audio_interviewer.stop()
@@ -627,7 +660,19 @@ class CopilotApp(rumps.App):
     def _start_answer(self, *, source: str = "hotkey") -> None:
         if self._answer_busy:
             if source == "hotkey":
+                prev_q = self._question_for_answer(source="hotkey") or ""
+                timing = peek_timing_record()
+                record_answer_turn(
+                    prev_q,
+                    "",
+                    provider=answer_provider(),
+                    source="hotkey",
+                    status="cancelled",
+                    timing=timing,
+                    speaker=(timing or {}).get("speaker") or "",
+                )
                 cancel_active_sdk()
+                bind_answer_generation(None)
                 self._answer_busy = False
                 self._resume_audio_if_needed()
             else:
@@ -638,13 +683,18 @@ class CopilotApp(rumps.App):
         if auto_pin:
             pin_answer_speaker(self._auto_answer_speaker)
 
-        question = self._question_for_answer(source=source)
-        if (
-            not question
-            and source == "hotkey"
-            and call_mic_muted_effective()
-        ):
-            question = self._self_question_from_stt_buffers_for_hotkey()
+        answer_target: tuple[str, str] | None = None
+        if source == "hotkey":
+            answer_target = self._resolve_hotkey_answer_target()
+        elif source == "auto" and self._auto_answer_speaker:
+            t = last_answer_target_for_speaker(self._auto_answer_speaker)
+            answer_target = t
+        else:
+            answer_target = last_answer_target()
+
+        if answer_target:
+            pin_answer_target(answer_target)
+        question = answer_target[0] if answer_target else None
         if not question:
             if auto_pin:
                 pin_answer_speaker(None)
@@ -677,6 +727,9 @@ class CopilotApp(rumps.App):
                 log("[copilot] auto-answer: нет вопроса для", self._auto_answer_speaker)
             return
 
+        self._answer_source = source
+        self._answer_generation = next_answer_generation()
+        bind_answer_generation(self._answer_generation)
         self._answer_busy = True
         if answer_pause_audio():
             self._pause_audio_for_sdk()
@@ -706,6 +759,13 @@ class CopilotApp(rumps.App):
         pin = self._auto_answer_speaker
         try:
             pin_answer_speaker(pin)
+            target = last_answer_target()
+            speaker_tag = target[1] if target else ""
+            begin_answer(
+                source=self._answer_source,
+                provider=answer_provider(),
+                speaker=speaker_tag,
+            )
             result = dispatch_answer()
             text = (result.get("text") or result.get("raw") or "").strip()
             question = last_answer_line() or ""
@@ -718,6 +778,7 @@ class CopilotApp(rumps.App):
             preview = text[:500] + ("…" if len(text) > 500 else "")
 
             def on_ok() -> None:
+                finish_answer()
                 self._answer_busy = False
                 self._log_answer(preview)
                 if result.get("cursor_agent_error") and not result.get(
@@ -731,6 +792,7 @@ class CopilotApp(rumps.App):
         except (CursorBridgeError, AnswerProviderError, Exception) as e:
 
             def on_err() -> None:
+                finish_answer()
                 self._answer_busy = False
                 rumps.alert("Ошибка ответа", str(e))
                 self._set_status("интервью" if self.session_active else "ожидание")
@@ -739,6 +801,8 @@ class CopilotApp(rumps.App):
             run_on_main(on_err)
         finally:
             pin_answer_speaker(None)
+            pin_answer_target(None)
+            bind_answer_generation(None)
             self._auto_answer_speaker = None
 
     def _log_answer(self, text: str) -> None:

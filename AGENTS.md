@@ -50,7 +50,7 @@
 - `ANSWER_SELF_QUESTIONS=auto` — ⌘↩ на `[Я]` при соло, `CALL_MIC_MUTED=1` или меню «Микрофон на созвоне выкл».
 - `ANSWER_SELF_MERGE_MAX=1` — для `[Я]` по умолчанию **один** последний сегмент (не склеивать серию разных вопросов); `>1` только если одна фраза режется STT на паузах.
 - `ANSWER_INTERVIEWER_MERGE_MAX=2` — не склеивать весь звонок BlackHole в один вопрос.
-- `ANSWER_AUTO=1` — ответ сразу после реплики в транскрипте; `ANSWER_AUTO_DELAY_SEC=0` — без задержки; **⌘↩** прерывает текущий ответ и запускает новый.
+- `ANSWER_AUTO=1` — ответ сразу после реплики в транскрипте; `ANSWER_AUTO_DELAY_SEC=0` — без задержки; **⌘↩** прерывает текущий ответ и запускает новый (устаревший generation не пишет `last-answer.md`, см. `answer_turn.py`).
 
 ## STT (локальный Whisper)
 
@@ -61,9 +61,17 @@
 | `STT_LATENCY` | `fast` \| `balanced` \| `quality` |
 | `WHISPER_PROMPT_MODE` | `tech` (собес), `general` (HR), `interview` (длинный prompt) |
 | `WHISPER_BEAM_SIZE` | Точность финального сегмента; live всегда beam=1 |
-| `WHISPER_GLOSSARY_FIXES=1` | Пост-правка GIL, Redis, … (не отдельные бренды) |
+| `WHISPER_GLOSSARY_FIXES=1` | RU→EN: GIL, Redis, Kafka (кавка→Kafka) — `stt_glossary.py` |
+| `COPILOT_TIMING=1` | `stt` / `llm_ttft` / `total` в терминал и в архив сессии |
+| `AUDIO_PRESET` | `call` \| `solo` \| `fast` — паузы VAD |
+| `STT_FINAL_DEBOUNCE_SEC` | Не дублировать одинаковый финал |
+| `STT_MIN_WORDS_FINAL_SELF` | Мин. слов (или `?`) для финала `[Я]` |
 
-Подробно: [docs/audio-setup.md](docs/audio-setup.md). Skill для агента: `.cursor/skills/interview-copilot/SKILL.md`.
+Подробно: [docs/audio-setup.md](docs/audio-setup.md), [docs/voice-pipeline.md](docs/voice-pipeline.md). Skill: `.cursor/skills/interview-copilot/SKILL.md`.
+
+## Архив сессий (разбор качества)
+
+При **CP → Выход** (или новый `copilot`) — `data/sessions/<YYYY-MM-DD_HH-MM-SS>/`: `transcript.md`, `review.md`, `turns.jsonl`, `meta.json`. На ход: `source` (`hotkey` / `auto`), `status` (`completed` / `cancelled` / `superseded`), `timing` при `COPILOT_TIMING=1`. См. [docs/copilot-workflow.md](docs/copilot-workflow.md#архив-сессий).
 
 ## Формат ответов (⌘↩ / транскрипт)
 

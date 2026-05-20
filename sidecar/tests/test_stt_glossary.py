@@ -12,6 +12,14 @@ def test_glossary_gil_redis(monkeypatch) -> None:
     )
 
 
+def test_glossary_kafka(monkeypatch) -> None:
+    monkeypatch.setattr(config, "load_dotenv", lambda: None)
+    monkeypatch.setenv("WHISPER_GLOSSARY_FIXES", "1")
+    assert apply_glossary_fixes("Расскажи, что знаешь про кавка") == (
+        "Расскажи, что знаешь про Kafka"
+    )
+
+
 def test_glossary_disabled(monkeypatch) -> None:
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
     monkeypatch.setenv("WHISPER_GLOSSARY_FIXES", "0")

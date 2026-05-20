@@ -25,6 +25,17 @@ def test_session_lifecycle(tmp_path, monkeypatch) -> None:
         "Работал в Самолёте над OAuth.",
         provider="deepseek",
         model="deepseek-chat",
+        source="hotkey",
+        status="completed",
+        timing={"stt_ms": 120, "llm_ttft_ms": 800, "answer_total_ms": 2100},
+        speaker="interviewer",
+    )
+    session_archive.record_answer_turn(
+        "Уточнение",
+        "",
+        provider="deepseek",
+        source="hotkey",
+        status="cancelled",
     )
     transcript.write_text(
         transcript.read_text(encoding="utf-8") + "[Я]: уточнение\n",
@@ -41,6 +52,10 @@ def test_session_lifecycle(tmp_path, monkeypatch) -> None:
 
     meta = json.loads((d1 / "meta.json").read_text(encoding="utf-8"))
     assert meta["status"] == "completed"
-    assert meta.get("turns") == 1
+    assert meta.get("turns") == 2
+    assert meta.get("turns_completed") == 1
+    assert meta.get("turns_cancelled") == 1
+    assert (d1 / "turns.jsonl").read_text(encoding="utf-8").count('"turn"') == 2
+    assert "llm_ttft=800ms" in review
 
     assert session_archive.active_session_dir() is None

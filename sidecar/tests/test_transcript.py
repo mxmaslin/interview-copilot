@@ -5,6 +5,13 @@ import threading
 import pytest
 
 import copilot.transcript as transcript
+from copilot.endpointing import reset_final_debounce_for_tests
+
+
+@pytest.fixture(autouse=True)
+def _reset_endpointing_state() -> None:
+    reset_final_debounce_for_tests()
+    transcript.pin_answer_target(None)
 
 
 @pytest.fixture(autouse=True)
@@ -153,7 +160,7 @@ def test_last_answer_target_interviewer_when_both(tmp_path, monkeypatch) -> None
     transcript.append_line("self", "Мой ответ")
     transcript.append_line("self", "Уточни про кэш")
 
-    assert transcript.last_answer_target() == ("Уточни про кэш", "self")
+    assert transcript.last_answer_target() == ("Уточни про cache", "self")
 
 
 def test_call_mic_muted_only_latest_self_not_merged(tmp_path, monkeypatch) -> None:

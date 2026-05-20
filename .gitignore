@@ -17,6 +17,7 @@ data/transcript.md
 data/last-answer.md
 data/last-screenshot-answer.md
 data/answers.log
+data/session-timing.jsonl
 data/sessions/
 data/call-mic-muted
 .vscode/zsh/.zsh_history

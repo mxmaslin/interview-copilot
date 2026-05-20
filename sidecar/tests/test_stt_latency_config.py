@@ -14,6 +14,8 @@ def test_stt_latency_fast_defaults(monkeypatch) -> None:
     monkeypatch.delenv("WHISPER_CONDITION_PREVIOUS", raising=False)
     monkeypatch.delenv("WHISPER_PATIENCE", raising=False)
     monkeypatch.delenv("STT_ROLLING", raising=False)
+    monkeypatch.delenv("AUDIO_PRESET", raising=False)
+    monkeypatch.delenv("AUDIO_ROLLING_SEC", raising=False)
     assert config.whisper_local_size() == "small"
     assert config.whisper_beam_size() == 1
     assert config.max_segment_seconds() == 1.8
@@ -27,6 +29,8 @@ def test_stt_latency_balanced_defaults(monkeypatch) -> None:
     monkeypatch.delenv("WHISPER_CONDITION_PREVIOUS", raising=False)
     monkeypatch.delenv("WHISPER_PATIENCE", raising=False)
     monkeypatch.delenv("STT_ROLLING", raising=False)
+    monkeypatch.delenv("AUDIO_PRESET", raising=False)
+    monkeypatch.delenv("AUDIO_ROLLING_SEC", raising=False)
     assert config.whisper_local_size() == "small"
     assert config.silence_seconds() == 0.45
     assert config.max_segment_seconds() == 2.0
@@ -40,6 +44,7 @@ def test_stt_latency_quality(monkeypatch) -> None:
     monkeypatch.setenv("STT_LATENCY", "quality")
     monkeypatch.delenv("WHISPER_MODEL_SIZE", raising=False)
     monkeypatch.delenv("WHISPER_VAD_FILTER", raising=False)
+    monkeypatch.delenv("AUDIO_PRESET", raising=False)
     assert config.whisper_local_size() == "large-v3"
     assert config.silence_seconds() == 1.0
     assert config.max_segment_seconds() == 0.0

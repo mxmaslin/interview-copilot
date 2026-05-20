@@ -50,8 +50,11 @@ copilot   # Terminal.app / iTerm, не терминал Cursor
 После **CP → Выход** (или нового `copilot`) сессия сохраняется в `data/sessions/<дата-время>/`:
 
 - `transcript.md` — полный диалог
-- `review.md` — вопросы и ответы Copilot по ходам
-- `meta.json` — время начала/конца
+- `review.md` — вопросы и ответы Copilot по ходам (источник, статус, тайминг)
+- `turns.jsonl` — машиночитаемый лог ходов (для скриптов и сводок)
+- `meta.json` — время начала/конца, счётчики `turns_completed` / `turns_cancelled` / `turns_superseded`
+
+На каждый ход: **источник** (`hotkey` / `auto`), **статус** (`completed` / `cancelled` при повторном ⌘↩ / `superseded` при устаревшей генерации), **тайминг** (`stt_ms`, `llm_ttft_ms`, `answer_total_ms` при `COPILOT_TIMING=1`).
 
 Папка в `.gitignore` — для разбора, насколько ответы попадали в вопрос.
 

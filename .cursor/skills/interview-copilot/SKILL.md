@@ -26,9 +26,13 @@ description: >-
 | **Rolling** (`STT_ROLLING=1`) | Каждые ~2 с речи → **«Интервьюер (live)»** в терминал (быстрый Whisper). |
 | **Финал** | Пауза ~0.45 с → одна строка в `data/transcript.md` + авто-ответ. |
 
-Переменные: `STT_LATENCY`, `AUDIO_ROLLING_SEC`, `WHISPER_PROMPT_MODE=tech` (собес, латиница без списка брендов), `WHISPER_GLOSSARY_FIXES`. Подробно: `docs/audio-setup.md`.
+Переменные: `STT_LATENCY`, `AUDIO_ROLLING_SEC`, `WHISPER_PROMPT_MODE=tech`, `WHISPER_GLOSSARY_FIXES` (кавка→Kafka в transcript/live), `AUDIO_PRESET=call`, `COPILOT_TIMING=1`. Доки: `docs/voice-pipeline.md`, `docs/audio-setup.md`, roadmap: `docs/voice-pipeline-roadmap.md`.
 
-Не хардкодить отдельные бренды (Kafka и т.д.) в код — только prompt/decode/глоссарий.
+Не хардкодить отдельные бренды в бизнес-логику — только `stt_glossary.py` / prompt / фильтры (`stt_filter`, `stt_live`).
+
+## Архив сессий
+
+`data/sessions/<stamp>/` — `turns.jsonl` (source, status, timing), `review.md`, `meta.json`. Пишется на каждый ответ и при **CP → Выход**. Статусы: `completed`, `cancelled` (повторный ⌘↩), `superseded` (устаревший worker).
 
 ## Ответы агента в Cursor
 
@@ -43,8 +47,11 @@ description: >-
 |---------|------|
 | Menubar / hotkeys | `sidecar/copilot/app.py` |
 | Сегментация аудио | `sidecar/copilot/listener.py` |
-| Rolling / merge | `sidecar/copilot/stt_segment.py`, `transcript.py` |
-| Whisper | `sidecar/copilot/stt.py`, `stt_prompt.py`, `config.py` |
+| Rolling / live / merge | `stt_segment.py`, `stt_live.py`, `transcript.py` |
+| Whisper / glossary | `stt.py`, `stt_prompt.py`, `stt_glossary.py`, `config.py` |
+| Endpointing | `endpointing.py` |
+| Тайминги / ходы ответа | `pipeline_timing.py`, `answer_turn.py` |
+| Архив сессий | `session_archive.py` |
 | Правила Cursor | `.cursor/rules/copilot.mdc`, `AGENTS.md` |
 
 ## Разработка

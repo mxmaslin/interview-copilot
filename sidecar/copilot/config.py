@@ -283,7 +283,27 @@ def sample_rate() -> int:
         return 16000
 
 
+def audio_preset() -> str:
+    """call | solo | fast — пресеты endpointing (см. docs/audio-setup.md)."""
+    return _env("AUDIO_PRESET", "").strip().lower()
+
+
+def stt_final_debounce_sec() -> float:
+    try:
+        return max(0.5, float(_env("STT_FINAL_DEBOUNCE_SEC", "4")))
+    except ValueError:
+        return 4.0
+
+
+def stt_min_words_final_self() -> int:
+    try:
+        return max(1, int(_env("STT_MIN_WORDS_FINAL_SELF", "2")))
+    except ValueError:
+        return 3
+
+
 def silence_seconds(*, speaker: str = "interviewer") -> float:
+    preset = audio_preset()
     if speaker == "self":
         explicit_self = _env("AUDIO_SILENCE_SEC_SELF")
         if explicit_self:
@@ -291,6 +311,12 @@ def silence_seconds(*, speaker: str = "interviewer") -> float:
                 return float(explicit_self)
             except ValueError:
                 pass
+        if preset == "call":
+            return 1.05
+        if preset == "solo":
+            return 0.72
+        if preset == "fast":
+            return 0.65
         preset = stt_latency_preset()
         if preset == "quality":
             return 1.1
@@ -304,10 +330,14 @@ def silence_seconds(*, speaker: str = "interviewer") -> float:
             return float(explicit)
         except ValueError:
             pass
-    preset = stt_latency_preset()
-    if preset == "quality":
+    if preset == "call":
+        return 0.55
+    if preset == "solo":
+        return 0.42
+    latency = stt_latency_preset()
+    if latency == "quality":
         return 1.0
-    if preset == "balanced":
+    if latency == "balanced":
         return 0.45
     return 0.38  # fast: короче пауза → раньше финальный сегмент
 
@@ -381,6 +411,18 @@ def answer_auto_delay_sec() -> float:
         return max(0.0, float(_env("ANSWER_AUTO_DELAY_SEC", "0.2")))
     except ValueError:
         return 0.2
+
+
+def copilot_timing_enabled() -> bool:
+    """Печать stt/llm таймингов в терминал после ответа (см. docs/voice-pipeline.md)."""
+    return _env("COPILOT_TIMING", "0").lower() in ("1", "true", "yes", "on")
+
+
+def copilot_timing_jsonl_enabled() -> bool:
+    """Append таймингов в data/session-timing.jsonl."""
+    if not copilot_timing_enabled():
+        return False
+    return _env("COPILOT_TIMING_JSONL", "0").lower() in ("1", "true", "yes", "on")
 
 
 def answer_provider() -> str:

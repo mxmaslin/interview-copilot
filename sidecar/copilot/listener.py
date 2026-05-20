@@ -17,6 +17,7 @@ from .config import (
     stt_rolling_enabled,
 )
 from .interview_quiet import log
+from .pipeline_timing import note_speech_end
 from .stt import STTError, transcribe_pcm16_mono
 from .stt_filter import is_stt_hallucination
 from .stt_worker import transcribe_async
@@ -175,6 +176,8 @@ class AudioListener:
     ) -> None:
         if speech_sec < min_speech_seconds() or not chunks:
             return
+        if not rolling:
+            note_speech_end(self._speaker)
         pcm = np.concatenate(chunks)
         on_done = self._on_transcript
 

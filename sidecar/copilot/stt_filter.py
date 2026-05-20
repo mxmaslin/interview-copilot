@@ -22,6 +22,9 @@ _HALLUCINATION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"^\s*да\.?\s*$",
         r"^\s*ага\.?\s*$",
         r"^\s*uh-?huh\.?\s*$",
+        r"\bвзрыв\b",
+        r"субтитр(?:ы|ов)?\s+субтитр",
+        r"смотрите\s+на\s+видео",
     )
 )
 

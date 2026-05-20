@@ -20,6 +20,7 @@ _lock = threading.Lock()
 _call_mic_muted_runtime = False
 _pending_self_utterance: str | None = None
 _answer_speaker_pin: str | None = None
+_answer_target_pin: tuple[str, str] | None = None
 
 
 def ensure_data_dir() -> None:
@@ -74,41 +75,63 @@ def merge_rolling_transcript(partials: list[str], final: str) -> str:
 
 def append_line(speaker: str, text: str) -> str | None:
     """speaker: 'interviewer' | 'self'. None — реплика [Я] буферизована (обрезан STT)."""
-    from .stt_filter import is_stt_hallucination
-    from .stt_segment import (
-        is_incomplete_self_utterance,
-        merge_self_continuation,
+    from .endpointing import (
+        is_duplicate_final,
+        is_semantically_complete,
+        note_final_committed,
     )
+    from .stt_filter import is_stt_hallucination
+    from .stt_segment import merge_self_continuation
 
     global _pending_self_utterance
-    cleaned = (text or "").strip()
+    from .stt_glossary import apply_glossary_fixes
+
+    cleaned = apply_glossary_fixes((text or "").strip())
     if not cleaned or is_stt_hallucination(cleaned):
+        return None
+    if is_duplicate_final(speaker, cleaned):
         return None
 
     with _lock:
         if speaker == "self":
             if _pending_self_utterance:
                 cleaned = merge_self_continuation(_pending_self_utterance, cleaned)
-            if is_incomplete_self_utterance(cleaned):
+            if not is_semantically_complete(cleaned, speaker="self"):
                 _pending_self_utterance = cleaned
                 return None
             _pending_self_utterance = None
-            return _write_dialogue_line("self", cleaned)
+            line = _write_dialogue_line("self", cleaned)
+            if line:
+                note_final_committed("self", cleaned)
+            return line
+        if not is_semantically_complete(cleaned, speaker="interviewer"):
+            return None
         _pending_self_utterance = None
-        return _write_dialogue_line(speaker, cleaned)
+        line = _write_dialogue_line(speaker, cleaned)
+        if line:
+            note_final_committed(speaker, cleaned)
+        return line
 
 
-def commit_self_text_now(text: str) -> str | None:
+def commit_self_text_now(text: str, *, force: bool = False) -> str | None:
     """Записать [Я] без ожидания «целой» реплики (⌘↩ и буфер rolling)."""
     global _pending_self_utterance
+    from .endpointing import is_duplicate_final, note_final_committed
     from .stt_filter import is_stt_hallucination
 
-    cleaned = (text or "").strip()
+    from .stt_glossary import apply_glossary_fixes
+
+    cleaned = apply_glossary_fixes((text or "").strip())
     if not cleaned or is_stt_hallucination(cleaned):
+        return None
+    if not force and is_duplicate_final("self", cleaned):
         return None
     with _lock:
         _pending_self_utterance = None
-        return _write_dialogue_line("self", cleaned)
+        line = _write_dialogue_line("self", cleaned)
+        if line:
+            note_final_committed("self", cleaned)
+        return line
 
 
 def _interviewer_text(line: str) -> str:
@@ -300,6 +323,37 @@ def pin_answer_speaker(speaker: str | None) -> None:
         _answer_speaker_pin = speaker if speaker in ("interviewer", "self") else None
 
 
+def pin_answer_target(target: tuple[str, str] | None) -> None:
+    """Закрепить (вопрос, speaker) для следующего dispatch_answer (⌘↩ + rolling)."""
+    global _answer_target_pin
+    with _lock:
+        if target and target[0].strip():
+            sp = target[1] if target[1] in ("interviewer", "self") else "self"
+            _answer_target_pin = (target[0].strip(), sp)
+        else:
+            _answer_target_pin = None
+
+
+def commit_interviewer_text_now(text: str, *, force: bool = False) -> str | None:
+    global _pending_self_utterance
+    from .endpointing import is_duplicate_final, note_final_committed
+    from .stt_filter import is_stt_hallucination
+
+    from .stt_glossary import apply_glossary_fixes
+
+    cleaned = apply_glossary_fixes((text or "").strip())
+    if not cleaned or is_stt_hallucination(cleaned):
+        return None
+    if not force and is_duplicate_final("interviewer", cleaned):
+        return None
+    with _lock:
+        _pending_self_utterance = None
+        line = _write_dialogue_line("interviewer", cleaned)
+        if line:
+            note_final_committed("interviewer", cleaned)
+        return line
+
+
 def last_answer_target_for_speaker(speaker: str) -> tuple[str, str] | None:
     """Вопрос для авто-ответа — по спикеру сегмента STT, без путаницы с [Я]."""
     flush_pending_self_line()
@@ -315,6 +369,8 @@ def last_answer_target_for_speaker(speaker: str) -> tuple[str, str] | None:
 def last_answer_target() -> tuple[str, str] | None:
     """Цель для ⌘↩: (вопрос, speaker). speaker: interviewer | self."""
     with _lock:
+        if _answer_target_pin:
+            return _answer_target_pin
         pin = _answer_speaker_pin
     if pin:
         return last_answer_target_for_speaker(pin)

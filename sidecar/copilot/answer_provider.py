@@ -21,6 +21,8 @@ from .config import (
 )
 from .answer_delivery import reveal_in_cursor, write_last_answer
 from .interview_quiet import log
+from .answer_turn import active_answer_generation, is_current_generation
+from .pipeline_timing import note_llm_first_token, peek_timing_record, wrap_stream_delta
 from .terminal_display import InterviewAnswerStream, print_interview_answer
 from .cursor_bridge import (
     CursorBridgeError,
@@ -97,12 +99,30 @@ def _finalize_answer(
     *,
     provider: str,
     model: str = "",
+    answer_generation: int | None = None,
 ) -> dict[str, Any]:
     """Файл, mirror, открытие в Cursor — без печати в терминал."""
     meta: dict[str, Any] = {
         "cursor_delivery": False,
         "cursor_agent_pushed": False,
     }
+
+    gen = answer_generation if answer_generation is not None else active_answer_generation()
+    timing = peek_timing_record()
+    if gen is not None and not is_current_generation(gen):
+        meta["superseded"] = True
+        if question:
+            record_answer_turn(
+                question,
+                answer,
+                provider=provider,
+                model=model,
+                source=(timing or {}).get("source") or "hotkey",
+                status="superseded",
+                timing=timing,
+                speaker=(timing or {}).get("speaker") or "",
+            )
+        return meta
 
     path = write_last_answer(question, answer, provider=provider, model=model)
     meta["answer_path"] = str(path)
@@ -112,6 +132,10 @@ def _finalize_answer(
             answer,
             provider=provider,
             model=model,
+            source=(timing or {}).get("source") or "hotkey",
+            status="completed",
+            timing=timing,
+            speaker=(timing or {}).get("speaker") or "",
         )
     log("[copilot] также:", path)
 
@@ -145,6 +169,7 @@ def _publish_answer(
     *,
     provider: str,
     model: str = "",
+    answer_generation: int | None = None,
 ) -> dict[str, Any]:
     print_interview_answer(question, answer, provider=provider, model=model)
     meta = _finalize_answer(
@@ -152,6 +177,7 @@ def _publish_answer(
         answer,
         provider=provider,
         model=model,
+        answer_generation=answer_generation,
     )
     meta["terminal"] = True
     return meta
@@ -163,6 +189,7 @@ def _publish_with_stream(
     provider: str,
     model: str,
     collect: Callable[[Callable[[str], None]], str],
+    answer_generation: int | None = None,
 ) -> dict[str, Any]:
     """collect(on_delta) -> full text; печать в терминал по чанкам."""
     stream = InterviewAnswerStream(question, provider=provider, model=model)
@@ -175,7 +202,7 @@ def _publish_with_stream(
         parts.append(delta)
         stream.write_chunk(delta)
 
-    text = collect(on_delta).strip() or "".join(parts).strip()
+    text = collect(wrap_stream_delta(on_delta)).strip() or "".join(parts).strip()
     if not text:
         stream.write_chunk(
             "\n[copilot] Пустой ответ от провайдера — "
@@ -188,7 +215,13 @@ def _publish_with_stream(
             "Cursor: node scripts/cursor-agent/agent.mjs start; "
             "или ANSWER_PROVIDER=deepseek в .env"
         )
-    meta = _finalize_answer(question, text, provider=provider, model=model)
+    meta = _finalize_answer(
+        question,
+        text,
+        provider=provider,
+        model=model,
+        answer_generation=answer_generation,
+    )
     meta["terminal"] = True
     meta["text"] = text
     return meta
@@ -213,6 +246,7 @@ def _chat_complete(
         temperature=0.25,
     )
     text = (resp.choices[0].message.content or "").strip()
+    note_llm_first_token()
     return {"status": "finished", "text": text, "provider": provider, "model": model}
 
 
@@ -350,6 +384,7 @@ def answer_via_cursor() -> dict[str, Any]:
 
     sdk = answer_last_question()
     text = (sdk.get("text") or "").strip()
+    note_llm_first_token()
     if not text:
         raise AnswerProviderError(
             "Пустой ответ (cursor). "

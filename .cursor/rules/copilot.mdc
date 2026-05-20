@@ -19,8 +19,8 @@ alwaysApply: true
 
 `data/transcript.md`: `[Интервьюер]:` (BlackHole), `[Я]:` (микрофон). **Начать прослушивание** обязательно.
 
-**Rolling** (`STT_ROLLING=1`): во время речи — **live** в терминал (~2 с); в файл — **финал** после паузы. `WHISPER_PROMPT_MODE=tech` на собесе. Не хардкодить бренды в код.
+**Rolling** (`STT_ROLLING=1`): во время речи — **live** в терминал (~2 с); в файл — **финал** после паузы. `WHISPER_GLOSSARY_FIXES` (кавка→Kafka). `COPILOT_TIMING=1` — тайминг в терминал и в `data/sessions/.../turns.jsonl`. Voice pipeline: `docs/voice-pipeline.md`.
 
-⌘↩: `[Интервьюер]` — до 2 сегментов с конца; `[Я]` / соло / «микрофон выкл» — **одна** последняя реплика (`ANSWER_SELF_MERGE_MAX=1`). ⌘G — очистка в сессии.
+⌘↩: `[Интервьюер]` — до 2 сегментов; `[Я]` / соло — **одна** последняя реплика (`ANSWER_SELF_MERGE_MAX=1`); live новее файла — `pin_answer_target`. Повторный ⌘↩ — cancel + `cancelled` в архиве; устаревший ответ — `superseded`. ⌘G — очистка в сессии.
 
-Скрин ⌘⌃⇧4: пауза STT → vision → **STT возобновлено**. `docs/audio-setup.md`. Ответ → `data/last-answer.md` (stream в терминал).
+Скрин ⌘⌃⇧4: пауза STT → vision → **STT возобновлено**. `docs/audio-setup.md`. Ответ → `data/last-answer.md` (stream). Архив: `docs/copilot-workflow.md` § Архив сессий.

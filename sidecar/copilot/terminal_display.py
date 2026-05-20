@@ -7,6 +7,7 @@ import textwrap
 from datetime import datetime
 
 from .interview_quiet import interview_active
+from .stt_live import sanitize_live_transcript
 
 _INNER = 70
 
@@ -274,9 +275,11 @@ def print_interviewer_transcript_live(text: str, *, final: bool) -> None:
         return
     prev = _live_interviewer_line
     if prev and chunk.lower().startswith(prev.lower()[: min(16, len(prev))]):
-        _live_interviewer_line = chunk
+        merged = chunk
     else:
-        _live_interviewer_line = f"{prev} {chunk}".strip() if prev else chunk
+        merged = f"{prev} {chunk}".strip() if prev else chunk
+    cleaned = sanitize_live_transcript(merged)
+    _live_interviewer_line = cleaned if cleaned else merged
     head = _c("1;33", "Интервьюер (live)") if _use_color() else "Интервьюер (live)"
     line = _wrap_block(_live_interviewer_line, indent="")
     out = "\n".join([head, *line, ""])
@@ -295,9 +298,11 @@ def print_self_transcript_live(text: str, *, final: bool) -> None:
         return
     prev = _live_self_line
     if prev and chunk.lower().startswith(prev.lower()[: min(16, len(prev))]):
-        _live_self_line = chunk
+        merged = chunk
     else:
-        _live_self_line = f"{prev} {chunk}".strip() if prev else chunk
+        merged = f"{prev} {chunk}".strip() if prev else chunk
+    cleaned = sanitize_live_transcript(merged)
+    _live_self_line = cleaned if cleaned else merged
     head = _c("1;36", "Я (live)") if _use_color() else "Я (live)"
     line = _wrap_block(_live_self_line, indent="")
     out = "\n".join([head, *line, ""])
