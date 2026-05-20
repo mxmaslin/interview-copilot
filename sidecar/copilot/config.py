@@ -187,7 +187,14 @@ def whisper_cpu_threads() -> int:
         return 0
 
 
-def whisper_beam_size() -> int:
+def stt_rolling_enabled() -> bool:
+    """Частичный STT во время речи (короткие сегменты + быстрый decode)."""
+    return _env("STT_ROLLING", "1").lower() not in ("0", "false", "no")
+
+
+def whisper_beam_size(*, live: bool = False) -> int:
+    if live:
+        return 1
     explicit = _env("WHISPER_BEAM_SIZE")
     if explicit:
         try:
@@ -198,12 +205,14 @@ def whisper_beam_size() -> int:
     if preset == "quality":
         return 5
     if preset == "balanced":
-        return 5
-    return 3
+        return 3
+    return 1
 
 
-def whisper_patience() -> float:
+def whisper_patience(*, live: bool = False) -> float:
     """Beam search patience (>0 точнее на редких словах, чуть медленнее)."""
+    if live:
+        return 0.0
     explicit = _env("WHISPER_PATIENCE")
     if explicit:
         try:
@@ -214,11 +223,13 @@ def whisper_patience() -> float:
     if preset == "quality":
         return 1.2
     if preset == "balanced":
-        return 1.0
+        return 0.0
     return 0.0
 
 
-def whisper_temperature() -> float | tuple[float, ...]:
+def whisper_temperature(*, live: bool = False) -> float | tuple[float, ...]:
+    if live:
+        return 0.0
     """0.0 — жадно; (0.0, 0.2) — fallback при низкой уверенности (лучше EN-термины)."""
     explicit = _env("WHISPER_TEMPERATURE")
     if explicit:
@@ -228,7 +239,7 @@ def whisper_temperature() -> float | tuple[float, ...]:
         if parts:
             return float(parts[0])
     preset = stt_latency_preset()
-    if preset in ("balanced", "quality"):
+    if preset == "quality":
         return (0.0, 0.2)
     return 0.0
 
@@ -248,12 +259,14 @@ def whisper_glossary_fixes() -> bool:
     return _env("WHISPER_GLOSSARY_FIXES", "1").lower() not in ("0", "false", "no")
 
 
-def whisper_condition_on_previous() -> bool:
+def whisper_condition_on_previous(*, live: bool = False) -> bool:
     """Контекст между сегментами — стабильнее латиница в терминах."""
+    if live:
+        return False
     explicit = _env("WHISPER_CONDITION_PREVIOUS", "")
     if explicit:
         return explicit.lower() not in ("0", "false", "no")
-    return stt_latency_preset() != "fast"
+    return stt_latency_preset() == "quality"
 
 
 def whisper_vad_filter() -> bool:
@@ -295,8 +308,8 @@ def silence_seconds(*, speaker: str = "interviewer") -> float:
     if preset == "quality":
         return 1.0
     if preset == "balanced":
-        return 0.55
-    return 0.42  # fast: короче пауза → раньше отдаём сегмент в Whisper
+        return 0.45
+    return 0.38  # fast: короче пауза → раньше финальный сегмент
 
 
 def min_speech_seconds() -> float:
@@ -338,9 +351,19 @@ def max_segment_seconds(*, speaker: str = "interviewer") -> float:
     preset = stt_latency_preset()
     if preset == "quality":
         return 0.0
+    if stt_rolling_enabled():
+        rolling = _env("AUDIO_ROLLING_SEC")
+        if rolling:
+            try:
+                return max(1.0, float(rolling))
+            except ValueError:
+                pass
+        if preset == "balanced":
+            return 2.0
+        return 1.8
     if preset == "balanced":
         return 5.0
-    return 3.5  # fast: не ждать длинной паузы в конце монолога
+    return 3.5
 
 
 def audio_prefer_16k() -> bool:

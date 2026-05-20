@@ -97,12 +97,9 @@ CURSOR_API_KEY=...                # скриншоты и ANSWER_PROVIDER=cursor
 
 STT_PROVIDER=local
 STT_LATENCY=balanced              # fast | balanced | quality
+STT_ROLLING=1                     # транскрипт по ходу речи (~2 с), не после паузы
 WHISPER_MODEL_SIZE=small          # fast/balanced; quality → large-v3
 WHISPER_PROMPT_MODE=tech          # tech — собес; general — HR; interview — макс. prompt
-WHISPER_BEAM_SIZE=5
-WHISPER_CONDITION_PREVIOUS=1
-WHISPER_PATIENCE=1.0
-WHISPER_TEMPERATURE=0,0.2
 ANSWER_AUTO=1                     # ответ после STT; ⌘↩ — сразу
 SCREENSHOT_SOLVE_ENABLED=1
 # SCREENSHOT_ANSWER_PROVIDER=anthropic   # см. docs/screenshot-solve.md

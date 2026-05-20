@@ -11,8 +11,8 @@ def test_balanced_whisper_decode_tuned_for_terms(monkeypatch) -> None:
     monkeypatch.delenv("WHISPER_PATIENCE", raising=False)
     monkeypatch.delenv("WHISPER_TEMPERATURE", raising=False)
 
-    assert config.whisper_beam_size() == 5
-    assert config.whisper_condition_on_previous() is True
-    assert config.whisper_patience() == 1.0
-    assert config.whisper_temperature() == (0.0, 0.2)
+    assert config.whisper_beam_size() == 3
+    assert config.whisper_condition_on_previous() is False
+    assert config.whisper_patience() == 0.0
+    assert config.whisper_temperature() == 0.0
     assert config.whisper_prompt_mode() == "tech"

@@ -65,11 +65,8 @@ ANSWER_INTERVIEWER_MERGE_MAX=2  # не склеивать весь звонок 
 ANSWER_AUTO=1
 ANSWER_AUTO_DELAY_SEC=0         # 0 = сразу; ⌘↩ всегда немедленно
 STT_LATENCY=balanced
+STT_ROLLING=1                   # live в терминал во время речи
 WHISPER_PROMPT_MODE=tech        # собес; general — HR; interview — длинный prompt
-WHISPER_BEAM_SIZE=5
-WHISPER_CONDITION_PREVIOUS=1
-WHISPER_PATIENCE=1.0
-WHISPER_TEMPERATURE=0,0.2
 CALL_MIC_MUTED=0
 SCREENSHOT_SOLVE_ENABLED=1
 TELEGRAM_INPUT_ENABLED=1

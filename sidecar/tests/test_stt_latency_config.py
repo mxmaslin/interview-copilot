@@ -13,8 +13,10 @@ def test_stt_latency_fast_defaults(monkeypatch) -> None:
     monkeypatch.delenv("WHISPER_BEAM_SIZE", raising=False)
     monkeypatch.delenv("WHISPER_CONDITION_PREVIOUS", raising=False)
     monkeypatch.delenv("WHISPER_PATIENCE", raising=False)
+    monkeypatch.delenv("STT_ROLLING", raising=False)
     assert config.whisper_local_size() == "small"
-    assert config.whisper_beam_size() == 3
+    assert config.whisper_beam_size() == 1
+    assert config.max_segment_seconds() == 1.8
 
 
 def test_stt_latency_balanced_defaults(monkeypatch) -> None:
@@ -24,12 +26,13 @@ def test_stt_latency_balanced_defaults(monkeypatch) -> None:
     monkeypatch.delenv("WHISPER_BEAM_SIZE", raising=False)
     monkeypatch.delenv("WHISPER_CONDITION_PREVIOUS", raising=False)
     monkeypatch.delenv("WHISPER_PATIENCE", raising=False)
+    monkeypatch.delenv("STT_ROLLING", raising=False)
     assert config.whisper_local_size() == "small"
-    assert config.silence_seconds() == 0.55
-    assert config.max_segment_seconds() == 5.0
+    assert config.silence_seconds() == 0.45
+    assert config.max_segment_seconds() == 2.0
     assert config.whisper_vad_filter() is False
-    assert config.whisper_beam_size() == 5
-    assert config.whisper_condition_on_previous() is True
+    assert config.whisper_beam_size() == 3
+    assert config.whisper_condition_on_previous() is False
 
 
 def test_stt_latency_quality(monkeypatch) -> None:

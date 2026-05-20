@@ -55,6 +55,23 @@ def _write_dialogue_line(speaker: str, text: str) -> str:
     return line
 
 
+def merge_rolling_transcript(partials: list[str], final: str) -> str:
+    """Склеить rolling-куски и финальный сегмент Whisper в одну реплику."""
+    chunks = [p.strip() for p in partials if (p or "").strip()]
+    fin = (final or "").strip()
+    if not chunks:
+        return fin
+    merged = " ".join(chunks).strip()
+    if not fin:
+        return merged
+    low_m, low_f = merged.lower(), fin.lower()
+    if low_f.startswith(low_m) or low_m in low_f:
+        return fin
+    if low_m.endswith(low_f) or low_f in low_m:
+        return merged
+    return f"{merged} {fin}".strip()
+
+
 def append_line(speaker: str, text: str) -> str | None:
     """speaker: 'interviewer' | 'self'. None — реплика [Я] буферизована (обрезан STT)."""
     from .stt_filter import is_stt_hallucination

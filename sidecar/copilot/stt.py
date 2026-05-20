@@ -43,13 +43,15 @@ class STTError(RuntimeError):
     pass
 
 
-def transcribe_pcm16_mono(pcm: np.ndarray, sample_rate: int) -> str:
-    """pcm: int16 mono numpy array."""
+def transcribe_pcm16_mono(
+    pcm: np.ndarray, sample_rate: int, *, live: bool = False
+) -> str:
+    """pcm: int16 mono numpy array. live=True — быстрый decode для rolling-сегмента."""
     if pcm.size == 0:
         return ""
     provider = stt_provider()
     if provider == "local":
-        return _transcribe_local(pcm, sample_rate)
+        return _transcribe_local(pcm, sample_rate, live=live)
     if provider == "openai":
         return _transcribe_openai(pcm, sample_rate)
     raise STTError(f"Неизвестный STT_PROVIDER={provider!r}. Используй local или openai.")
@@ -153,22 +155,22 @@ def _pcm_to_float32(pcm: np.ndarray) -> np.ndarray:
     return pcm.astype(np.float32) / 32768.0
 
 
-def _whisper_transcribe_kwargs() -> dict:
+def _whisper_transcribe_kwargs(*, live: bool = False) -> dict:
     kwargs: dict = {
-        "beam_size": whisper_beam_size(),
+        "beam_size": whisper_beam_size(live=live),
         "best_of": 1,
         "vad_filter": whisper_vad_filter(),
-        "condition_on_previous_text": whisper_condition_on_previous(),
+        "condition_on_previous_text": whisper_condition_on_previous(live=live),
         "without_timestamps": True,
-        "temperature": whisper_temperature(),
+        "temperature": whisper_temperature(live=live),
     }
-    patience = whisper_patience()
+    patience = whisper_patience(live=live)
     if patience > 0:
         kwargs["patience"] = patience
     return kwargs
 
 
-def _transcribe_local(pcm: np.ndarray, sample_rate: int) -> str:
+def _transcribe_local(pcm: np.ndarray, sample_rate: int, *, live: bool = False) -> str:
     model = _get_local_model()
     audio = _pcm_to_float32(pcm)
     if sample_rate != 16000:
@@ -180,10 +182,13 @@ def _transcribe_local(pcm: np.ndarray, sample_rate: int) -> str:
         language="ru",
         task="transcribe",
         initial_prompt=prompt,
-        **_whisper_transcribe_kwargs(),
+        **_whisper_transcribe_kwargs(live=live),
     )
     parts = [seg.text.strip() for seg in segments if seg.text.strip()]
-    return apply_glossary_fixes(" ".join(parts).strip())
+    text = " ".join(parts).strip()
+    if live:
+        return text
+    return apply_glossary_fixes(text)
 
 
 def _transcribe_local_file(path: Path) -> str:

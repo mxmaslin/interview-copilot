@@ -53,7 +53,12 @@ from .cursor_ide_chat import (
     sync_env_chat_binding,
 )
 from .interview_quiet import interview_active, log, set_interview_active
-from .terminal_display import print_interviewer_transcript, print_self_transcript
+from .terminal_display import (
+    print_interviewer_transcript,
+    print_interviewer_transcript_live,
+    print_self_transcript,
+    print_self_transcript_live,
+)
 from .shutdown import shutdown_resources, suppress_resource_tracker_warning
 from .instance import SidecarLock
 from .audio_devices import AudioDeviceNotFoundError
@@ -66,6 +71,7 @@ from .session_archive import end_session, start_session
 from .transcript import (
     answer_self_questions_active,
     append_line,
+    merge_rolling_transcript,
     clear_dialogue,
     last_answer_line,
     last_answer_target_for_speaker,
@@ -100,6 +106,8 @@ class CopilotApp(rumps.App):
         self._auto_answer_timer: threading.Timer | None = None
         self._auto_answer_timer_lock = threading.Lock()
         self._auto_answer_speaker: str | None = None
+        self._rolling_interviewer: list[str] = []
+        self._rolling_self: list[str] = []
         self._audio_interviewer = AudioListener(
             speaker="interviewer",
             device_hint=audio_device_hint_interviewer(),
@@ -179,8 +187,15 @@ class CopilotApp(rumps.App):
         warmup_session()
         self._begin_interview(silent=True)
 
+    def _clear_rolling_stt_buffers(self) -> None:
+        for attr in ("_rolling_interviewer", "_rolling_self"):
+            buf = getattr(self, attr, None)
+            if buf is not None:
+                buf.clear()
+
     def _begin_interview(self, *, silent: bool = False) -> None:
         clear_dialogue()
+        self._clear_rolling_stt_buffers()
         start_session()
         self.session_active = True
         set_interview_active(True)
@@ -256,23 +271,37 @@ class CopilotApp(rumps.App):
     def _stop_telegram_input(self) -> None:
         self._telegram.stop()
 
-    def _on_transcript_interviewer(self, text: str) -> None:
+    def _on_transcript_interviewer(self, text: str, *, final: bool = True) -> None:
         def apply() -> None:
+            if not final:
+                self._rolling_interviewer.append(text)
+                if interview_active() and terminal_show_interviewer_stt():
+                    print_interviewer_transcript_live(text, final=False)
+                return
+            merged = merge_rolling_transcript(self._rolling_interviewer, text)
+            self._rolling_interviewer.clear()
             if interview_active() and terminal_show_interviewer_stt():
-                print_interviewer_transcript(text)
-            if append_line("interviewer", text):
+                print_interviewer_transcript_live(merged, final=True)
+            if append_line("interviewer", merged):
                 self._schedule_auto_answer(speaker="interviewer")
 
         run_on_main(apply)
 
-    def _on_transcript_self(self, text: str) -> None:
+    def _on_transcript_self(self, text: str, *, final: bool = True) -> None:
         def apply() -> None:
-            line = append_line("self", text)
+            if not final:
+                self._rolling_self.append(text)
+                if interview_active() and terminal_show_self_stt():
+                    print_self_transcript_live(text, final=False)
+                return
+            merged = merge_rolling_transcript(self._rolling_self, text)
+            self._rolling_self.clear()
+            line = append_line("self", merged)
             if not line:
                 return
             shown = line.replace("[Я]:", "", 1).strip()
             if interview_active() and terminal_show_self_stt():
-                print_self_transcript(shown)
+                print_self_transcript_live(shown, final=True)
             notify("Транскрипт", "Я", shown[:100])
             self._schedule_auto_answer(speaker="self")
 
@@ -510,6 +539,7 @@ class CopilotApp(rumps.App):
 
     def on_clear_transcript(self, _: object) -> None:
         clear_dialogue()
+        self._clear_rolling_stt_buffers()
         if interview_active():
             sys.stdout.write("\n[Транскрипт очищен — интервьюер и я]\n\n")
             sys.stdout.flush()

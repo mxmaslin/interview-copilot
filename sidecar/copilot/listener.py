@@ -14,6 +14,7 @@ from .config import (
     max_segment_seconds,
     min_speech_seconds,
     silence_seconds,
+    stt_rolling_enabled,
 )
 from .interview_quiet import log
 from .stt import STTError, transcribe_pcm16_mono
@@ -104,14 +105,24 @@ class AudioListener:
                 speech_blocks += 1
                 silent_blocks = 0
                 if max_seg > 0 and speech_blocks * block_sec >= max_seg:
-                    self._enqueue_flush(buf, speech_blocks * block_sec, sr)
+                    self._enqueue_flush(
+                        buf,
+                        speech_blocks * block_sec,
+                        sr,
+                        rolling=stt_rolling_enabled(),
+                    )
                     buf.clear()
                     silent_blocks = 0
                     speech_blocks = 0
             elif buf:
                 silent_blocks += 1
                 if silent_blocks * block_sec >= silence_limit:
-                    self._enqueue_flush(buf, speech_blocks * block_sec, sr)
+                    self._enqueue_flush(
+                        buf,
+                        speech_blocks * block_sec,
+                        sr,
+                        rolling=False,
+                    )
                     buf.clear()
                     silent_blocks = 0
                     speech_blocks = 0
@@ -143,7 +154,7 @@ class AudioListener:
                         pass
                     self._stream = None
             if buf:
-                self._enqueue_flush(buf, speech_blocks * block_sec, sr)
+                self._enqueue_flush(buf, speech_blocks * block_sec, sr, rolling=False)
         except Exception as e:
             logger.exception("Audio listener failed")
             msg = str(e)
@@ -155,7 +166,12 @@ class AudioListener:
             raise RuntimeError(msg) from e
 
     def _enqueue_flush(
-        self, chunks: list[np.ndarray], speech_sec: float, sr: int
+        self,
+        chunks: list[np.ndarray],
+        speech_sec: float,
+        sr: int,
+        *,
+        rolling: bool,
     ) -> None:
         if speech_sec < min_speech_seconds() or not chunks:
             return
@@ -167,14 +183,18 @@ class AudioListener:
                 logger.debug("STT dropped (%s), len=%d", self._speaker, len(text))
                 return
             try:
+                on_done(text, final=not rolling)
+            except TypeError:
                 on_done(text)
             except Exception:
                 logger.exception("on_transcript failed")
 
-        if not transcribe_async(pcm, sr, deliver):
+        if not transcribe_async(pcm, sr, deliver, live=rolling):
+            if rolling:
+                return
             log("[copilot] STT очередь переполнена, сегмент пропущен")
             try:
-                text = transcribe_pcm16_mono(pcm, sr)
+                text = transcribe_pcm16_mono(pcm, sr, live=False)
                 if text:
                     deliver(text)
             except STTError as e:

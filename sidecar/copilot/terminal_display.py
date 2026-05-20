@@ -243,6 +243,53 @@ def _print_speaker_transcript(text: str, *, label: str, color: str) -> None:
     sys.stdout.flush()
 
 
+_live_interviewer_line = ""
+_live_self_line = ""
+
+
+def print_interviewer_transcript_live(text: str, *, final: bool) -> None:
+    """Rolling STT: частичный текст во время речи; final — завершённая реплика."""
+    global _live_interviewer_line
+    chunk = (text or "").strip()
+    if not chunk:
+        return
+    if final:
+        _live_interviewer_line = ""
+        print_interviewer_transcript(chunk)
+        return
+    prev = _live_interviewer_line
+    if prev and chunk.lower().startswith(prev.lower()[: min(16, len(prev))]):
+        _live_interviewer_line = chunk
+    else:
+        _live_interviewer_line = f"{prev} {chunk}".strip() if prev else chunk
+    head = _c("1;33", "Интервьюер (live)") if _use_color() else "Интервьюер (live)"
+    line = _wrap_block(_live_interviewer_line, indent="")
+    out = "\n".join([head, *line, ""])
+    sys.stdout.write("\x1b[2K\r" + out)
+    sys.stdout.flush()
+
+
+def print_self_transcript_live(text: str, *, final: bool) -> None:
+    global _live_self_line
+    chunk = (text or "").strip()
+    if not chunk:
+        return
+    if final:
+        _live_self_line = ""
+        print_self_transcript(chunk)
+        return
+    prev = _live_self_line
+    if prev and chunk.lower().startswith(prev.lower()[: min(16, len(prev))]):
+        _live_self_line = chunk
+    else:
+        _live_self_line = f"{prev} {chunk}".strip() if prev else chunk
+    head = _c("1;36", "Я (live)") if _use_color() else "Я (live)"
+    line = _wrap_block(_live_self_line, indent="")
+    out = "\n".join([head, *line, ""])
+    sys.stdout.write("\x1b[2K\r" + out)
+    sys.stdout.flush()
+
+
 def print_interviewer_transcript(text: str) -> None:
     """Реплика интервьюера в stdout (после сегмента STT)."""
     _print_speaker_transcript(text, label="Интервьюер", color="1;33")

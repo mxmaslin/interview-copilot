@@ -8,7 +8,8 @@ import numpy as np
 
 from .stt import STTError, transcribe_pcm16_mono
 
-_queue: queue.Queue[tuple[np.ndarray, int, Callable[[str], None]] | None] | None = None
+_SttJob = tuple[np.ndarray, int, bool, Callable[[str], None]]
+_queue: queue.Queue[_SttJob | None] | None = None
 _thread: threading.Thread | None = None
 _lock = threading.Lock()
 
@@ -19,9 +20,9 @@ def _worker_loop() -> None:
         item = _queue.get()
         if item is None:
             break
-        pcm, sr, on_done = item
+        pcm, sr, live, on_done = item
         try:
-            text = transcribe_pcm16_mono(pcm, sr)
+            text = transcribe_pcm16_mono(pcm, sr, live=live)
         except STTError:
             continue
         if text and len(text) >= 2:
@@ -44,12 +45,14 @@ def transcribe_async(
     pcm: np.ndarray,
     sample_rate: int,
     on_done: Callable[[str], None],
+    *,
+    live: bool = False,
 ) -> bool:
     """Поставить сегмент в очередь STT. False если очередь переполнена."""
     ensure_stt_worker()
     assert _queue is not None
     try:
-        _queue.put_nowait((pcm, sample_rate, on_done))
+        _queue.put_nowait((pcm, sample_rate, live, on_done))
         return True
     except queue.Full:
         return False
