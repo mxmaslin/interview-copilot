@@ -54,7 +54,7 @@ copilot   # Terminal.app / iTerm, не терминал Cursor
 - `turns.jsonl` — машиночитаемый лог ходов (для скриптов и сводок)
 - `meta.json` — время начала/конца, счётчики `turns_completed` / `turns_cancelled` / `turns_superseded`
 
-На каждый ход: **источник** (`hotkey` / `auto`), **статус** (`completed` / `cancelled` при повторном ⌘↩ / `superseded` при устаревшей генерации), **тайминг** (`stt_ms`, `llm_ttft_ms`, `answer_total_ms` при `COPILOT_TIMING=1`).
+На каждый ход: **источник** (`hotkey` / `auto` / `barge-in` при новой речи во время ответа), **статус** (`completed` / `cancelled` при повторном ⌘↩ или barge-in / `superseded` при устаревшей генерации), **тайминг** (`stt_ms`, `llm_ttft_ms`, `answer_total_ms` при `COPILOT_TIMING=1`).
 
 Папка в `.gitignore` — для разбора, насколько ответы попадали в вопрос.
 

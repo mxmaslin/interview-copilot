@@ -32,6 +32,8 @@ class AudioListener:
     def __init__(
         self,
         on_transcript: Callable[[str], None] | None = None,
+        *,
+        on_speech_start: Callable[[], None] | None = None,
         speaker: str = "interviewer",
         device_hint: str = "",
         label: str = "",
@@ -40,6 +42,7 @@ class AudioListener:
         self._device_hint = device_hint
         self._label = label or speaker
         self._on_transcript = on_transcript or self._default_on_transcript
+        self._on_speech_start = on_speech_start
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._stream = None
@@ -93,15 +96,22 @@ class AudioListener:
         buf: list[np.ndarray] = []
         silent_blocks = 0
         speech_blocks = 0
+        in_utterance = False
 
         def callback(indata, frames, time_info, status) -> None:  # noqa: ANN001
-            nonlocal silent_blocks, speech_blocks
+            nonlocal silent_blocks, speech_blocks, in_utterance
             if self._stop.is_set():
                 return
             mono = indata[:, 0] if indata.ndim > 1 else indata.flatten()
             pcm = (mono * 32767).astype(np.int16)
             rms = float(np.sqrt(np.mean(mono.astype(np.float64) ** 2)))
             if rms >= rms_threshold:
+                if not in_utterance and self._on_speech_start is not None:
+                    in_utterance = True
+                    try:
+                        self._on_speech_start()
+                    except Exception:
+                        logger.exception("on_speech_start failed")
                 buf.append(pcm.copy())
                 speech_blocks += 1
                 silent_blocks = 0
@@ -127,6 +137,7 @@ class AudioListener:
                     buf.clear()
                     silent_blocks = 0
                     speech_blocks = 0
+                    in_utterance = False
 
         try:
 

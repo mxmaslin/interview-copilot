@@ -17,6 +17,10 @@ _WORD_MESSAGING: list[tuple[str, str]] = [
     ("кавки", "Kafka"),
     ("кавкану", "Kafka"),
     ("кофта", "Kafka"),  # Habr: «кофта» вместо Kafka на неоднозначном аудио
+    ("кавказ", "Kafka"),  # часто вместо Kafka, не Кавказ-регион на техсобесе
+    ("кавкад", "Kafka"),
+    ("такавка", "Kafka"),
+    ("кафказ", "Kafka"),
     ("редис", "Redis"),
     ("редисе", "Redis"),
     ("ребит", "RabbitMQ"),
@@ -219,6 +223,8 @@ PHRASE_FIXES: list[tuple[str, str]] = [
     (r"\bэй\s*пи\s*ай\b", "API"),
     (r"\bпул\s+реквест\b", "pull request"),
     (r"\bмерж\s+реквест\b", "merge request"),
+    (r"\bпро\s+кавк\w{0,6}\b", "про Kafka"),
+    (r"\bпро\s+кавказ\b", "про Kafka"),
     (r"\bпадать\s+в\s+кавк\w*\b", "писать в Kafka"),
     (r"\bна\s+гоше\b", "на Go"),
     (r"\bв\s+прод\b", "в prod"),

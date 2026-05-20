@@ -16,9 +16,10 @@ from .transcript_rules import (
     spurious_short_questions,
 )
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 _call_mic_muted_runtime = False
 _pending_self_utterance: str | None = None
+_pending_flush_timer: threading.Timer | None = None
 _answer_speaker_pin: str | None = None
 _answer_target_pin: tuple[str, str] | None = None
 
@@ -32,9 +33,60 @@ def pending_self_utterance() -> str | None:
         return _pending_self_utterance
 
 
+def _cancel_pending_flush_timer() -> None:
+    global _pending_flush_timer
+    with _lock:
+        if _pending_flush_timer is not None:
+            _pending_flush_timer.cancel()
+            _pending_flush_timer = None
+
+
+def _schedule_pending_flush_timer() -> None:
+    from .config import stt_pending_flush_sec
+    from .main_thread import run_on_main
+
+    sec = stt_pending_flush_sec()
+    if sec <= 0:
+        return
+
+    def fire() -> None:
+        run_on_main(_flush_pending_to_ui, None)
+
+    global _pending_flush_timer
+    with _lock:
+        if _pending_flush_timer is not None:
+            _pending_flush_timer.cancel()
+        _pending_flush_timer = threading.Timer(sec, fire)
+        _pending_flush_timer.daemon = True
+        _pending_flush_timer.start()
+
+
+def _flush_pending_to_ui() -> None:
+    """Таймаут: обрезок STT → transcript (+ терминал на main thread)."""
+    line = flush_pending_self_line()
+    if not line:
+        return
+    shown = line.replace("[Я]:", "", 1).strip()
+
+    def show() -> None:
+        from .interview_quiet import interview_active
+        from .terminal_display import print_self_transcript_live
+
+        if interview_active():
+            print_self_transcript_live(shown, final=True)
+
+    if threading.current_thread() is threading.main_thread():
+        show()
+    else:
+        from .main_thread import run_on_main
+
+        run_on_main(show, None)
+
+
 def flush_pending_self_line() -> str | None:
     """Записать буфер обрезанной реплики [Я] перед ⌘↩."""
     global _pending_self_utterance
+    _cancel_pending_flush_timer()
     with _lock:
         pending = _pending_self_utterance
         if not pending:
@@ -98,7 +150,9 @@ def append_line(speaker: str, text: str) -> str | None:
                 cleaned = merge_self_continuation(_pending_self_utterance, cleaned)
             if not is_semantically_complete(cleaned, speaker="self"):
                 _pending_self_utterance = cleaned
+                _schedule_pending_flush_timer()
                 return None
+            _cancel_pending_flush_timer()
             _pending_self_utterance = None
             line = _write_dialogue_line("self", cleaned)
             if line:
@@ -325,11 +379,13 @@ def pin_answer_speaker(speaker: str | None) -> None:
 
 def pin_answer_target(target: tuple[str, str] | None) -> None:
     """Закрепить (вопрос, speaker) для следующего dispatch_answer (⌘↩ + rolling)."""
+    from .stt_glossary import normalize_question_text
+
     global _answer_target_pin
     with _lock:
         if target and target[0].strip():
             sp = target[1] if target[1] in ("interviewer", "self") else "self"
-            _answer_target_pin = (target[0].strip(), sp)
+            _answer_target_pin = (normalize_question_text(target[0]), sp)
         else:
             _answer_target_pin = None
 
@@ -430,8 +486,12 @@ def last_interviewer_line() -> str | None:
 
 def last_answer_line() -> str | None:
     """Текст последнего вопроса для ⌘↩ (интервьюер или я в solo-режиме)."""
+    from .stt_glossary import normalize_question_text
+
     target = last_answer_target()
-    return target[0] if target else None
+    if not target:
+        return None
+    return normalize_question_text(target[0]) or target[0]
 
 
 def compact_dialogue_context(max_chars: int) -> str:

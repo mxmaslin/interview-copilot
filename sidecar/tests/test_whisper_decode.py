@@ -6,6 +6,7 @@ import copilot.config as config
 def test_balanced_whisper_decode_tuned_for_terms(monkeypatch) -> None:
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
     monkeypatch.setenv("STT_LATENCY", "balanced")
+    monkeypatch.setenv("STT_FAST_FINAL", "0")
     monkeypatch.delenv("WHISPER_BEAM_SIZE", raising=False)
     monkeypatch.delenv("WHISPER_CONDITION_PREVIOUS", raising=False)
     monkeypatch.delenv("WHISPER_PATIENCE", raising=False)

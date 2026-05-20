@@ -109,6 +109,23 @@ def answer_self_merge_max() -> int:
         return 3
 
 
+def answer_barge_in_speakers() -> frozenset[str]:
+    """Каналы, при старте речи которых отменять in-flight ответ (voice-agent barge-in).
+
+    0/false — выкл; interviewer — только [Интервьюер]; 1/all — оба канала.
+    """
+    raw = _env("ANSWER_BARGE_IN_ON_SPEECH", "interviewer").strip().lower()
+    if raw in ("0", "false", "no", "off", ""):
+        return frozenset()
+    if raw in ("1", "true", "yes", "all", "both"):
+        return frozenset({"interviewer", "self"})
+    if raw == "interviewer":
+        return frozenset({"interviewer"})
+    if raw == "self":
+        return frozenset({"self"})
+    return frozenset()
+
+
 def telegram_input_enabled() -> bool:
     return _env("TELEGRAM_INPUT_ENABLED", "0").lower() not in ("0", "false", "no")
 
@@ -194,6 +211,8 @@ def stt_rolling_enabled() -> bool:
 
 def whisper_beam_size(*, live: bool = False) -> int:
     if live:
+        return 1
+    if stt_fast_final_decode():
         return 1
     explicit = _env("WHISPER_BEAM_SIZE")
     if explicit:
@@ -284,8 +303,24 @@ def sample_rate() -> int:
 
 
 def audio_preset() -> str:
-    """call | solo | fast — пресеты endpointing (см. docs/audio-setup.md)."""
+    """call | solo | fast | interview — пресеты endpointing (см. docs/audio-setup.md)."""
     return _env("AUDIO_PRESET", "").strip().lower()
+
+
+def stt_pending_flush_sec() -> float:
+    """Через столько с после обрезка STT ([Я]) — дописать в transcript без новой речи."""
+    try:
+        return max(0.0, float(_env("STT_PENDING_FLUSH_SEC", "1.2")))
+    except ValueError:
+        return 1.2
+
+
+def stt_fast_final_decode() -> bool:
+    """Финальный Whisper с beam=1 (быстрее, чуть грубее)."""
+    explicit = _env("STT_FAST_FINAL", "")
+    if explicit:
+        return explicit.lower() not in ("0", "false", "no")
+    return stt_latency_preset() == "fast"
 
 
 def stt_final_debounce_sec() -> float:
@@ -312,17 +347,19 @@ def silence_seconds(*, speaker: str = "interviewer") -> float:
             except ValueError:
                 pass
         if preset == "call":
-            return 1.05
+            return 0.78
         if preset == "solo":
-            return 0.72
+            return 0.68
         if preset == "fast":
-            return 0.65
-        preset = stt_latency_preset()
-        if preset == "quality":
+            return 0.58
+        if preset == "interview":
+            return 0.62
+        preset_latency = stt_latency_preset()
+        if preset_latency == "quality":
             return 1.1
-        if preset == "balanced":
-            return 0.85
-        return 0.72
+        if preset_latency == "balanced":
+            return 0.68
+        return 0.62
 
     explicit = _env("AUDIO_SILENCE_SEC")
     if explicit:

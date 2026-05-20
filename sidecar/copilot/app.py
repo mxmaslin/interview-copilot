@@ -17,6 +17,7 @@ from .config import (
     DATA_DIR,
     answer_auto_delay_sec,
     answer_auto_enabled,
+    answer_barge_in_speakers,
     answer_pause_audio,
     answer_provider,
     stt_live_min_words,
@@ -85,6 +86,7 @@ from .transcript import (
     commit_self_text_now,
     clear_dialogue,
     flush_pending_self_line,
+    pending_self_utterance,
     last_answer_line,
     last_answer_target,
     last_answer_target_for_speaker,
@@ -131,12 +133,14 @@ class CopilotApp(rumps.App):
             device_hint=audio_device_hint_interviewer(),
             label="интервьюер",
             on_transcript=self._on_transcript_interviewer,
+            on_speech_start=lambda: self._on_speech_barge_in("interviewer"),
         )
         self._audio_self = AudioListener(
             speaker="self",
             device_hint=audio_device_hint_self(),
             label="я",
             on_transcript=self._on_transcript_self,
+            on_speech_start=lambda: self._on_speech_barge_in("self"),
         )
         self._telegram = TelegramInterviewerInput(
             on_message=self._on_transcript_interviewer
@@ -336,7 +340,10 @@ class CopilotApp(rumps.App):
             note_stt_final("self")
             line = append_line("self", merged)
             if not line:
-                if interview_active() and terminal_show_self_stt():
+                pending = pending_self_utterance()
+                if pending and interview_active() and terminal_show_self_stt():
+                    print_self_transcript_live(f"{pending} …", final=False)
+                elif interview_active() and terminal_show_self_stt():
                     clear_self_transcript_live()
                 return
             shown = line.replace("[Я]:", "", 1).strip()
@@ -631,6 +638,32 @@ class CopilotApp(rumps.App):
             sys.stdout.flush()
         else:
             notify("Copilot", "Транскрипт", "Реплики интервьюера и твои удалены")
+
+    def _on_speech_barge_in(self, speaker: str) -> None:
+        """Новая реплика во время генерации — отменить ответ (как повторный ⌘↩)."""
+        if speaker not in answer_barge_in_speakers():
+            return
+
+        def apply() -> None:
+            if not self._answer_busy:
+                return
+            log("[copilot] barge-in: речь", speaker, "— отмена ответа")
+            timing = peek_timing_record()
+            record_answer_turn(
+                self._question_for_answer(source="hotkey") or "",
+                "",
+                provider=answer_provider(),
+                source="barge-in",
+                status="cancelled",
+                timing=timing,
+                speaker=speaker,
+            )
+            cancel_active_sdk()
+            bind_answer_generation(None)
+            self._answer_busy = False
+            self._resume_audio_if_needed()
+
+        run_on_main(apply, None)
 
     def _cancel_auto_answer_timer(self) -> None:
         lock = getattr(self, "_auto_answer_timer_lock", None)

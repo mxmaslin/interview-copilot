@@ -51,6 +51,7 @@
 - `ANSWER_SELF_MERGE_MAX=1` — для `[Я]` по умолчанию **один** последний сегмент (не склеивать серию разных вопросов); `>1` только если одна фраза режется STT на паузах.
 - `ANSWER_INTERVIEWER_MERGE_MAX=2` — не склеивать весь звонок BlackHole в один вопрос.
 - `ANSWER_AUTO=1` — ответ сразу после реплики в транскрипте; `ANSWER_AUTO_DELAY_SEC=0` — без задержки; **⌘↩** прерывает текущий ответ и запускает новый (устаревший generation не пишет `last-answer.md`, см. `answer_turn.py`).
+- `ANSWER_BARGE_IN_ON_SPEECH=interviewer` — новая речь на канале отменяет in-flight ответ (как повторный ⌘↩); `0` — выкл; `all` — оба канала.
 
 ## STT (локальный Whisper)
 
@@ -65,7 +66,9 @@
 | `COPILOT_TIMING=1` | `stt` / `llm_ttft` / `total` в терминал и в архив сессии |
 | `COPILOT_TIMING_HINTS=1` | Подсказки по тюнингу после timing; `scripts/analyze-session-timing.py` |
 | `STT_LIVE_MIN_WORDS=2` | Не печатать live, пока в rolling < N слов |
-| `AUDIO_PRESET` | `call` \| `solo` \| `fast` — паузы VAD |
+| `AUDIO_PRESET` | `interview` \| `call` \| `solo` \| `fast` — паузы VAD |
+| `STT_FAST_FINAL` | `1` — финальный Whisper beam=1 (быстрее на CPU) |
+| `STT_PENDING_FLUSH_SEC` | Дописать обрезок STT в transcript без новой речи |
 | `STT_FINAL_DEBOUNCE_SEC` | Не дублировать одинаковый финал |
 | `STT_MIN_WORDS_FINAL_SELF` | Мин. слов (или `?`) для финала `[Я]` |
 
@@ -73,7 +76,7 @@
 
 ## Архив сессий (разбор качества)
 
-При **CP → Выход** (или новый `copilot`) — `data/sessions/<YYYY-MM-DD_HH-MM-SS>/`: `transcript.md`, `review.md`, `turns.jsonl`, `meta.json`. На ход: `source` (`hotkey` / `auto`), `status` (`completed` / `cancelled` / `superseded`), `timing` при `COPILOT_TIMING=1`. См. [docs/copilot-workflow.md](docs/copilot-workflow.md#архив-сессий).
+При **CP → Выход** (или новый `copilot`) — `data/sessions/<YYYY-MM-DD_HH-MM-SS>/`: `transcript.md`, `review.md`, `turns.jsonl`, `meta.json`. На ход: `source` (`hotkey` / `auto` / `barge-in`), `status` (`completed` / `cancelled` / `superseded`), `timing` при `COPILOT_TIMING=1`. См. [docs/copilot-workflow.md](docs/copilot-workflow.md#архив-сессий).
 
 ## Формат ответов (⌘↩ / транскрипт)
 

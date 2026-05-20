@@ -6,6 +6,7 @@ import copilot.config as config
 def test_whisper_beam_balanced_preset(monkeypatch) -> None:
     monkeypatch.setattr(config, "load_dotenv", lambda: None)
     monkeypatch.setenv("STT_LATENCY", "balanced")
+    monkeypatch.setenv("STT_FAST_FINAL", "0")
     monkeypatch.delenv("WHISPER_BEAM_SIZE", raising=False)
     assert config.whisper_beam_size() == 3
 

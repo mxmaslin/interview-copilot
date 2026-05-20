@@ -36,6 +36,7 @@ _openai_clients: dict[tuple[str, str], object] = {}
 from .cursor_ide_chat import BIND_HELP, chat_is_bound
 from .interview_prompt import build_system_prompt, build_user_message as build_answer_user_message
 from .session_archive import record_answer_turn
+from .stt_glossary import normalize_question_text
 from .transcript import (
     answer_self_questions_active,
     call_mic_muted_effective,
@@ -73,12 +74,17 @@ def _no_question_error() -> str:
     return "Нет реплики [Интервьюер] в транскрипте."
 
 
-def _build_messages() -> tuple[str, str]:
-    """(system, user)."""
+def _resolved_question() -> tuple[str, str]:
     target = last_answer_target()
     if not target:
         raise AnswerProviderError(_no_question_error())
     question, speaker = target
+    return normalize_question_text(question) or question, speaker
+
+
+def _build_messages() -> tuple[str, str]:
+    """(system, user)."""
+    question, speaker = _resolved_question()
     context = ""
     if not answer_minimal_context():
         if speaker == "self" and call_mic_muted_effective():
@@ -322,10 +328,7 @@ def answer_via_deepseek() -> dict[str, Any]:
         raise AnswerProviderError(
             "ANSWER_PROVIDER=deepseek, но DEEPSEEK_API_KEY не задан в .env"
         )
-    target = last_answer_target()
-    if not target:
-        raise AnswerProviderError(_no_question_error())
-    question, _speaker = target
+    question, _speaker = _resolved_question()
     model = deepseek_answer_model()
 
     if terminal_answer_stream():

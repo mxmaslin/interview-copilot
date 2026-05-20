@@ -13,8 +13,10 @@ Copilot — **voice-augmented sidecar**: STT → LLM → текст. План п
 | **Debounce false EOU** | `endpointing.is_duplicate_final` | **3 ✓** |
 | **Barge-in / cancel in-flight** | `answer_turn`, `pin_answer_target`, cancel SDK | **4 ✓** |
 | Orchestration: question pin | `pin_answer_target`, rolling на ⌘↩ | 4 ✓ |
-| Presets VAD/silence | `AUDIO_PRESET=call\|solo\|fast` | **3c ✓** |
+| Presets VAD/silence | `AUDIO_PRESET=call\|solo\|fast\|interview` | **3c ✓** |
 | Colocated STT (local Whisper) | `STT_PROVIDER=local` | есть |
+| **STT QoS: final before rolling** | `stt_worker` PriorityQueue | **8 ✓** |
+| **Barge-in on new speech** | `ANSWER_BARGE_IN_ON_SPEECH`, `listener.on_speech_start` | **9 ✓** |
 | TTS / sub-300ms e2e | не применимо (нет TTS) | — |
 
 ## Фазы
@@ -28,6 +30,9 @@ Copilot — **voice-augmented sidecar**: STT → LLM → текст. План п
 | **4** | ✓ | `answer_turn`, `pin_answer_target`, rolling ⌘↩ |
 | **5** | ✓ | `COPILOT_TIMING_HINTS`, `scripts/analyze-session-timing.py`, `STT_LIVE_MIN_WORDS` |
 | **6** | ✓ | README, AGENTS, skill, rules, audio-setup, copilot-workflow |
+| **7** | ✓ | `normalize_question_text`, Kafka variants, LLM STT-tolerance в prompt |
+| **8** | ✓ | STT QoS: `PriorityQueue` (финал раньше rolling), `STT_FAST_FINAL`, `AUDIO_PRESET=interview`, `STT_PENDING_FLUSH_SEC`, `RLock` в transcript |
+| **9** | ✓ | Barge-in: `ANSWER_BARGE_IN_ON_SPEECH=interviewer` — отмена in-flight ответа при новой речи |
 
 ### Фаза 0 — верификация
 
@@ -69,6 +74,26 @@ python scripts/analyze-session-timing.py 2026-05-20_18-22-52
 | Большой `llm_ttft` | модель / `ANSWER_MINIMAL_CONTEXT` / `ANSWER_MAX_TOKENS` |
 | Большой `stt` | `AUDIO_PRESET`, `AUDIO_SILENCE_SEC_*`, `STT_LATENCY=fast` |
 | Нет `stt` при ⌘↩ на live | норма; hint в терминале |
+
+### Фаза 8 — STT QoS (реализовано)
+
+- Очередь Whisper: **финал** (`live=False`) обрабатывается раньше **rolling** (`live=True`).
+- `STT_FAST_FINAL=1` — `beam=1` на финале (быстрее decode на CPU).
+- `AUDIO_PRESET=interview` — короче пауза `[Я]` (~0.62 с).
+- `STT_PENDING_FLUSH_SEC` — обрезок «…про» дописывается в transcript без новой речи.
+- `transcript.py`: `RLock` — без deadlock при склейке pending + финал.
+
+### Фаза 9 — barge-in по речи (реализовано)
+
+Пока идёт ответ (`ANSWER_AUTO` или предыдущий ход), **новая речь** на канале из `ANSWER_BARGE_IN_ON_SPEECH` отменяет SDK (как повторный ⌘↩). По умолчанию только **interviewer**; `0` — выкл; `all` — оба канала.
+
+```bash
+ANSWER_BARGE_IN_ON_SPEECH=interviewer   # по умолчанию
+# ANSWER_BARGE_IN_ON_SPEECH=0
+# ANSWER_BARGE_IN_ON_SPEECH=all
+```
+
+В архиве сессии: `source=barge-in`, `status=cancelled`.
 
 ## Что не делаем
 

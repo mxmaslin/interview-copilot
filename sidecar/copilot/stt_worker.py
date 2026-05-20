@@ -9,9 +9,18 @@ import numpy as np
 from .stt import STTError, transcribe_pcm16_mono
 
 _SttJob = tuple[np.ndarray, int, bool, Callable[[str], None]]
-_queue: queue.Queue[_SttJob | None] | None = None
+_queue: queue.PriorityQueue[tuple[int, int, _SttJob] | None] | None = None
+_seq = 0
+_seq_lock = threading.Lock()
 _thread: threading.Thread | None = None
 _lock = threading.Lock()
+
+
+def _next_seq() -> int:
+    global _seq
+    with _seq_lock:
+        _seq += 1
+        return _seq
 
 
 def _worker_loop() -> None:
@@ -20,7 +29,8 @@ def _worker_loop() -> None:
         item = _queue.get()
         if item is None:
             break
-        pcm, sr, live, on_done = item
+        _prio, _n, job = item
+        pcm, sr, live, on_done = job
         try:
             text = transcribe_pcm16_mono(pcm, sr, live=live)
         except STTError:
@@ -34,7 +44,7 @@ def ensure_stt_worker() -> None:
     with _lock:
         if _thread is not None and _thread.is_alive():
             return
-        _queue = queue.Queue(maxsize=8)
+        _queue = queue.PriorityQueue(maxsize=16)
         _thread = threading.Thread(
             target=_worker_loop, daemon=True, name="stt-worker"
         )
@@ -48,11 +58,13 @@ def transcribe_async(
     *,
     live: bool = False,
 ) -> bool:
-    """Поставить сегмент в очередь STT. False если очередь переполнена."""
+    """Очередь STT: финал (live=False) впереди rolling (live=True)."""
     ensure_stt_worker()
     assert _queue is not None
+    prio = 1 if live else 0
+    job: _SttJob = (pcm, sample_rate, live, on_done)
     try:
-        _queue.put_nowait((pcm, sample_rate, live, on_done))
+        _queue.put_nowait((prio, _next_seq(), job))
         return True
     except queue.Full:
         return False
@@ -63,8 +75,6 @@ def shutdown_stt_worker() -> None:
     with _lock:
         q = _queue
         t = _thread
-        _queue = None
-        _thread = None
     if q is not None:
         try:
             q.put_nowait(None)
@@ -72,3 +82,6 @@ def shutdown_stt_worker() -> None:
             pass
     if t is not None:
         t.join(timeout=3.0)
+    with _lock:
+        _queue = None
+        _thread = None

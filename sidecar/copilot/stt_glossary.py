@@ -30,6 +30,11 @@ def apply_glossary_fixes(text: str) -> str:
     return out
 
 
+def normalize_question_text(text: str) -> str:
+    """Вопрос для ⌘↩ / LLM — всегда через glossary (voice-agent normalization layer)."""
+    return apply_glossary_fixes((text or "").strip())
+
+
 def glossary_entry_count() -> int:
     """Число правил (слова + фразы) — для тестов и логов."""
     return len(WORD_FIXES) + len(PHRASE_FIXES)

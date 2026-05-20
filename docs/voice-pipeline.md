@@ -65,10 +65,16 @@ COPILOT_TIMING=1
 - Cancel in-flight answer (повторное ⌘↩)
 - Два спикера и политика «чей вопрос»
 
-## Turn-taking ответа (фаза 4)
+## Turn-taking ответа (фаза 4 + 9)
 
 - Повторный **⌘↩** отменяет SDK и инвалидирует generation (`answer_turn`) — прерванный ответ **не** перезаписывает `last-answer.md`.
+- **Barge-in по речи** (`ANSWER_BARGE_IN_ON_SPEECH`, по умолчанию `interviewer`): новая реплика на канале во время генерации — та же отмена, `source=barge-in` в архиве.
 - `pin_answer_target` — LLM видит тот же вопрос, что показан в терминале.
+
+## STT QoS (фаза 8)
+
+- `stt_worker`: финальный сегмент в очереди **раньше** rolling.
+- `STT_FAST_FINAL=1`, `AUDIO_PRESET=interview`, `STT_PENDING_FLUSH_SEC` — см. [audio-setup.md](audio-setup.md).
 
 ## Архив сессий (аналитика)
 
@@ -88,7 +94,7 @@ COPILOT_TIMING=1
 
 ## Glossary STT
 
-`WHISPER_GLOSSARY_FIXES=1` — пост-правка в `stt_glossary.py` на финале transcript, commit и в live (`stt_live.sanitize_live_transcript`). Примеры: `кавка`→Kafka, `редис`→Redis, `гил`→GIL. Не дублировать списом в `WHISPER_PROMPT`.
+`WHISPER_GLOSSARY_FIXES=1` — `stt_glossary_terms.py` + `normalize_question_text()` (фаза 7) на финале transcript, commit и в live (`stt_live.sanitize_live_transcript`). Примеры: `кавка`→Kafka, `редис`→Redis, `гил`→GIL. Не дублировать списом в `WHISPER_PROMPT`.
 
 ## Фаза 5 — тюнинг latency
 
