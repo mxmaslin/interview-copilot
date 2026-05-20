@@ -45,6 +45,7 @@ def test_solve_screenshot_from_clipboard_writes_file(
     monkeypatch.setattr(ss, "_api_credentials", lambda _p: ("key", None))
     monkeypatch.setattr(config, "terminal_answer_stream", lambda: True)
     monkeypatch.setattr(config, "screenshot_solve_also_last_answer", lambda: False)
+    monkeypatch.setattr(config, "screenshot_clear_clipboard", lambda: False)
 
     class Delta:
         def __init__(self, content: str) -> None:

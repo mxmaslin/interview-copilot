@@ -10,7 +10,7 @@
 | `context/forbidden-patterns.local` | Ваши подстроки для локальной проверки ПДн |
 | `context/scrub-replacements.local` | Замены для `scrub-git-history.sh` |
 | `context/vacancy.md` | Личные заметки по вакансии |
-| `data/*` | Транскрипты интервью, ответы, agent-state |
+| `data/*`, `data/sessions/` | Транскрипты, архивы сессий с ответами ИИ, agent-state |
 | `резюме*.pdf` | PDF резюме |
 | `.playwright-mcp/` | Логи браузера с URL |
 

@@ -25,6 +25,7 @@ _SECRET_PATTERNS = (
     re.compile(r"CURSOR_API_KEY\s*=\s*cursor_[a-zA-Z0-9]{10,}", re.I),
     re.compile(r"TELEGRAM_BOT_TOKEN\s*=\s*\d+:[A-Za-z0-9_-]{20,}"),
     re.compile(r"HH_ACCESS_TOKEN\s*=\s*\S{20,}"),
+    re.compile(r"ANTHROPIC_API_KEY\s*=\s*sk-ant-[a-zA-Z0-9_-]{20,}", re.I),
 )
 
 _HH_RESUME_URL_RE = re.compile(
@@ -90,6 +91,10 @@ def test_sensitive_paths_not_tracked() -> None:
     tracked = set(_git_ls_files())
     for path in _TRACKED_DENYLIST:
         assert path not in tracked, f"{path} не должен быть в git"
+    for rel in tracked:
+        assert not rel.startswith("data/sessions/"), (
+            f"Архив сессии не должен быть в git: {rel}"
+        )
 
 
 def test_no_hh_resume_ids_in_tracked_files() -> None:
