@@ -123,6 +123,7 @@ AUDIO_INPUT_SELF=Brio             # подстрока имени твоего �
 |------|------|
 | Menubar и hotkeys | [docs/copilot-workflow.md](docs/copilot-workflow.md) |
 | Voice pipeline (STT, endpointing, тайминги) | [docs/voice-pipeline.md](docs/voice-pipeline.md) · [roadmap](docs/voice-pipeline-roadmap.md) |
+| Словарь STT (кавка→Kafka, …) | [docs/stt-glossary.md](docs/stt-glossary.md) |
 | Аудио (BlackHole, Zoom, Meet) | [docs/audio-setup.md](docs/audio-setup.md) |
 | Telegram-ввод | [docs/telegram-input.md](docs/telegram-input.md) |
 | Скриншоты / vision | [docs/screenshot-solve.md](docs/screenshot-solve.md) |
