@@ -1,14 +1,26 @@
 ---
-description: Copilot — ответы для sidecar / транскрипта
+description: Interview Copilot — sidecar STT, rolling transcript, answers from transcript
 alwaysApply: true
 ---
 
 # Copilot
 
-Сессия интервью — **menubar CP** в **Terminal.app** (не Cursor): `copilot` → сразу `⌘↩`/`⌘G`, сброс `transcript.md`; **Начать прослушивание** (STT); `⌘⌃⇧4` → vision. Меню: `docs/copilot-workflow.md`. `deepseek` + скрины → Cursor SDK при `CURSOR_API_KEY`. Выход: **CP → Выход** или **Ctrl+C**. См. `AGENTS.md`.
+Сессия — **menubar CP** в **Terminal.app** (не Cursor): `copilot` → `⌘↩`/`⌘G`, сброс `transcript.md`; **Начать прослушивание**; `⌘⌃⇧4` vision. Меню: `docs/copilot-workflow.md`. Skill: `.cursor/skills/interview-copilot/SKILL.md`. Полный контекст: `AGENTS.md`.
 
-Резюме: `context/resume.md` (`@context/resume.md`) — опыт и стек кандидата; не выдумывай факты вне резюме.
+Резюме: `context/resume.md` (`@context/resume.md`) — только факты оттуда.
 
-⌘↩: ответ **строго на последний вопрос**; по умолчанию **ANSWER_AUTO=1** — ответ сразу после STT (⌘↩ прерывает и перезапускает). ⌘⌃⇧4 (скрин): только решение, **без** «Теории». Скрины и ответ **параллельно**.
+## Ответы
 
-Транскрипт: `data/transcript.md` (`[Интервьюер]:` / `[Я]:`). BlackHole + **Multi-Output** для звонка; Brio = `[Я]`. **Начать прослушивание** обязательно для STT. ⌘↩: `[Интервьюер]` — до 2 сегментов с конца; `[Я]` (соло / меню «микрофон на созвоне выкл») — **только последняя** реплика, без склейки старых вопросов (`ANSWER_SELF_MERGE_MAX=1`). ⌘⌃⇧4: очередь кадров, пауза STT → vision → **STT возобновлено** когда очередь пуста. `STT_ROLLING=1` — транскрипт в терминал по ходу речи; `WHISPER_PROMPT_MODE=tech` для собеса. Финал в `transcript.md` после паузы. См. `docs/audio-setup.md`. Ответ по чанкам → `data/last-answer.md`.
+⌘↩ — **строго последний вопрос**; `ANSWER_AUTO=1` — после **финальной** реплики STT (⌘↩ прерывает). Скрин: решение **без** «Теории»; скрины и ⌘↩ параллельно при `deepseek`.
+
+Формат: русский, EN-термины, определение → пример → оговорки; 5–10 предложений; coding — шаги и сложность.
+
+## STT и транскрипт
+
+`data/transcript.md`: `[Интервьюер]:` (BlackHole), `[Я]:` (микрофон). **Начать прослушивание** обязательно.
+
+**Rolling** (`STT_ROLLING=1`): во время речи — **live** в терминал (~2 с); в файл — **финал** после паузы. `WHISPER_PROMPT_MODE=tech` на собесе. Не хардкодить бренды в код.
+
+⌘↩: `[Интервьюер]` — до 2 сегментов с конца; `[Я]` / соло / «микрофон выкл» — **одна** последняя реплика (`ANSWER_SELF_MERGE_MAX=1`). ⌘G — очистка в сессии.
+
+Скрин ⌘⌃⇧4: пауза STT → vision → **STT возобновлено**. `docs/audio-setup.md`. Ответ → `data/last-answer.md` (stream в терминал).

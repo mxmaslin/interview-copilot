@@ -52,6 +52,19 @@
 - `ANSWER_INTERVIEWER_MERGE_MAX=2` — не склеивать весь звонок BlackHole в один вопрос.
 - `ANSWER_AUTO=1` — ответ сразу после реплики в транскрипте; `ANSWER_AUTO_DELAY_SEC=0` — без задержки; **⌘↩** прерывает текущий ответ и запускает новый.
 
+## STT (локальный Whisper)
+
+| Переменная | Назначение |
+|------------|------------|
+| `STT_ROLLING=1` | Live-текст в терминал во время речи; `transcript.md` — только финал |
+| `AUDIO_ROLLING_SEC` | Срез монолога без паузы (по умолчанию ~2 с) |
+| `STT_LATENCY` | `fast` \| `balanced` \| `quality` |
+| `WHISPER_PROMPT_MODE` | `tech` (собес), `general` (HR), `interview` (длинный prompt) |
+| `WHISPER_BEAM_SIZE` | Точность финального сегмента; live всегда beam=1 |
+| `WHISPER_GLOSSARY_FIXES=1` | Пост-правка GIL, Redis, … (не отдельные бренды) |
+
+Подробно: [docs/audio-setup.md](docs/audio-setup.md). Skill для агента: `.cursor/skills/interview-copilot/SKILL.md`.
+
 ## Формат ответов (⌘↩ / транскрипт)
 
 - Отвечай **только на заданный вопрос**; не подменяй тему шаблоном про стек.
