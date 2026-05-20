@@ -376,7 +376,7 @@ async function cmdStart() {
   try {
     const run = await agent.send(
       "Copilot sidecar: **новая сессия интервью** в репозитории `_copilot`.\n\n" +
-        "Сюда будут приходить вопросы из `data/transcript.md` и готовые ответы (DeepSeek / Cursor). " +
+        "Сюда будут приходить вопросы из RAM sidecar (⌘↩) и готовые ответы (DeepSeek / Cursor). " +
         "Открой этот чат во время собеседования.",
     );
     await run.wait();
@@ -567,21 +567,24 @@ function buildAnswerSystemPrompt() {
   return base;
 }
 
-function buildAnswerPrompt(transcript, question, speaker) {
+function loadAnswerPayloadFromEnv() {
+  const b64 = process.env.COPILOT_ANSWER_PAYLOAD_B64;
+  if (!b64) return null;
+  try {
+    return JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function buildAnswerPromptFromPayload(payload) {
+  const question = (payload?.question || "").trim();
+  const speaker = payload?.speaker || "interviewer";
+  const context = (payload?.context || "").trim();
   const qLabel =
     speaker === "self"
       ? "Мой вопрос (соло, звук интервьюера отключён или микрофон на созвоне выключен)"
       : "Вопрос интервьюера";
-  const minimal = envBool("CURSOR_ANSWER_MINIMAL");
-  const maxChars = envInt("CURSOR_ANSWER_CONTEXT_CHARS", 800);
-  let context = "";
-  if (!minimal) {
-    if (speaker === "self" && callMicMutedEffective()) {
-      context = "";
-    } else {
-      context = compactDialogueContext(transcript, maxChars);
-    }
-  }
   const system = buildAnswerSystemPrompt();
   const ctxBlock = context ? `\n\nКраткий контекст диалога:\n${context}` : "";
   return `${system}
@@ -632,18 +635,16 @@ async function cmdAnswerWarm() {
 
 async function cmdAnswer() {
   const state = requireState();
-  const transcriptPath = join(REPO_ROOT, "data", "transcript.md");
-  let transcript = "";
-  if (existsSync(transcriptPath)) {
-    transcript = readFileSync(transcriptPath, "utf8");
-  }
-  const { text: question, speaker } = lastAnswerTarget(transcript);
+  const payload = loadAnswerPayloadFromEnv();
+  const question = (payload?.question || "").trim();
   if (!question) {
-    console.error("No question in data/transcript.md");
+    console.error(
+      "No question in COPILOT_ANSWER_PAYLOAD_B64 (sidecar RAM → cursor_bridge)",
+    );
     process.exit(1);
   }
 
-  const prompt = buildAnswerPrompt(transcript, question, speaker);
+  const prompt = buildAnswerPromptFromPayload(payload);
   console.error(
     `[cursor-agent] answer: resume ${state.agentId}, model=${modelLabel()}, prompt≈${prompt.length} chars`,
   );

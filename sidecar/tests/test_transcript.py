@@ -31,9 +31,6 @@ def test_append_line_interviewer() -> None:
 
 
 def test_append_line_self(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     line = transcript.append_line("self", "Отвечу про GIL")
 
@@ -41,9 +38,6 @@ def test_append_line_self(tmp_path, monkeypatch) -> None:
 
 
 def test_last_interviewer_line(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     transcript.append_line("interviewer", "Первый вопрос")
     transcript.append_line("self", "Мой ответ")
@@ -53,9 +47,6 @@ def test_last_interviewer_line(tmp_path, monkeypatch) -> None:
 
 
 def test_last_interviewer_question_merges_consecutive(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     import copilot.config as cfg
 
     monkeypatch.setattr(cfg, "answer_interviewer_merge_max", lambda: 10)
@@ -67,9 +58,6 @@ def test_last_interviewer_question_merges_consecutive(tmp_path, monkeypatch) -> 
 
 
 def test_last_interviewer_merge_capped(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     import copilot.config as cfg
 
     monkeypatch.setattr(cfg, "answer_interviewer_merge_max", lambda: 2)
@@ -81,9 +69,6 @@ def test_last_interviewer_merge_capped(tmp_path, monkeypatch) -> None:
 
 
 def test_last_interviewer_question_stops_at_self(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     transcript.append_line("interviewer", "Старый вопрос")
     transcript.append_line("self", "Ответ")
@@ -103,9 +88,6 @@ def test_clear_dialogue() -> None:
 
 
 def test_last_interviewer_skips_trailing_self(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     transcript.append_line("interviewer", "Ну не надо.")
     transcript.append_line("self", "Ещё раз спросите")
@@ -114,9 +96,6 @@ def test_last_interviewer_skips_trailing_self(tmp_path, monkeypatch) -> None:
 
 
 def test_last_self_question_merges(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     import copilot.config as cfg
 
     monkeypatch.setattr(cfg, "answer_self_merge_max", lambda: 2)
@@ -130,9 +109,6 @@ def test_last_self_question_merges(tmp_path, monkeypatch) -> None:
 
 
 def test_last_answer_target_solo_self(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: True)
 
     transcript.append_line("self", "Расскажи про Redis")
@@ -141,9 +117,6 @@ def test_last_answer_target_solo_self(tmp_path, monkeypatch) -> None:
 
 
 def test_last_answer_target_interviewer_when_both(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(transcript, "call_mic_muted_effective", lambda: False)
     monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: True)
 
@@ -155,9 +128,6 @@ def test_last_answer_target_interviewer_when_both(tmp_path, monkeypatch) -> None
 
 
 def test_call_mic_muted_only_latest_self_not_merged(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     import copilot.config as cfg
 
     monkeypatch.setattr(cfg, "call_mic_muted_on_call", lambda: False)
@@ -171,9 +141,6 @@ def test_call_mic_muted_only_latest_self_not_merged(tmp_path, monkeypatch) -> No
 
 
 def test_call_mic_muted_ignores_trailing_interviewer(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     import copilot.config as cfg
 
     monkeypatch.setattr(cfg, "call_mic_muted_on_call", lambda: False)
@@ -186,9 +153,6 @@ def test_call_mic_muted_ignores_trailing_interviewer(tmp_path, monkeypatch) -> N
 
 
 def test_self_overrides_spurious_interviewer(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: False)
 
     transcript.append_line("self", "Здравствуйте меня слышишь?")
@@ -201,9 +165,6 @@ def test_self_overrides_spurious_interviewer(tmp_path, monkeypatch) -> None:
 
 
 def test_real_interviewer_not_overridden_by_short_self(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: False)
 
     transcript.append_line("interviewer", "Расскажите про транзакции в PostgreSQL")
@@ -216,9 +177,6 @@ def test_real_interviewer_not_overridden_by_short_self(tmp_path, monkeypatch) ->
 
 
 def test_last_answer_target_normal_interview(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(transcript, "answer_self_questions_active", lambda: False)
 
     transcript.append_line("interviewer", "Про GIL")
@@ -230,9 +188,6 @@ def test_last_answer_target_normal_interview(tmp_path, monkeypatch) -> None:
 def test_last_answer_target_call_mic_muted_prefers_self(
     tmp_path, monkeypatch
 ) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     import copilot.config as cfg
 
     monkeypatch.setattr(cfg, "call_mic_muted_on_call", lambda: False)
@@ -247,9 +202,6 @@ def test_last_answer_target_call_mic_muted_prefers_self(
 def test_answer_self_active_when_no_interviewer(
     tmp_path, monkeypatch
 ) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     import copilot.config as cfg
 
@@ -262,17 +214,11 @@ def test_answer_self_active_when_no_interviewer(
 
 
 def test_last_interviewer_line_empty(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     assert transcript.last_interviewer_line() is None
 
 
 def test_clear_during_concurrent_append(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     errors: list[BaseException] = []
     barrier = threading.Barrier(2)

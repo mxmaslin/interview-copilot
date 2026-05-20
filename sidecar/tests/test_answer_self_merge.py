@@ -8,9 +8,6 @@ import copilot.transcript as transcript
 def test_build_messages_skips_stale_context_when_call_mic_muted(
     tmp_path, monkeypatch
 ) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(
         transcript, "CALL_MIC_MUTED_FLAG", tmp_path / "call-mic-muted"
     )

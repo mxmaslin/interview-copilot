@@ -5,7 +5,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_ROOT / "data"
-TRANSCRIPT_PATH = DATA_DIR / "transcript.md"
 ANSWERS_PATH = DATA_DIR / "answers.log"
 CURSOR_AGENT_DIR = REPO_ROOT / "scripts" / "cursor-agent"
 AGENT_STATE_PATH = DATA_DIR / "agent-state.json"

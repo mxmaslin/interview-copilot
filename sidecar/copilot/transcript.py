@@ -4,7 +4,7 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
-from .config import DATA_DIR, TRANSCRIPT_PATH
+from .config import DATA_DIR
 
 CALL_MIC_MUTED_FLAG = DATA_DIR / "call-mic-muted"
 from .transcript_rules import (
@@ -126,21 +126,12 @@ def _write_dialogue_line(speaker: str, text: str) -> str:
     return line
 
 
-def export_transcript_markdown() -> str:
-    """Снимок диалога для архива сессии или «Открыть транскрипт»."""
-    with _lock:
-        if not _dialogue_lines:
-            return "# Interview transcript\n\n"
-        body = "\n".join(_dialogue_lines)
-    return f"# Interview transcript\n\n{body}\n"
-
-
-def flush_transcript_to_disk(path: Path | None = None) -> Path:
-    """Записать RAM → файл по запросу (не на hot path STT)."""
-    target = path or TRANSCRIPT_PATH
-    ensure_data_dir()
-    target.write_text(export_transcript_markdown(), encoding="utf-8")
-    return target
+def format_dialogue_for_terminal() -> str:
+    """Текст диалога для печати в терминал (CP → Показать диалог)."""
+    lines = dialogue_lines()
+    if not lines:
+        return "(диалог пуст)"
+    return "\n".join(lines)
 
 
 def merge_rolling_transcript(partials: list[str], final: str) -> str:
@@ -236,7 +227,7 @@ def _self_text(line: str) -> str:
 
 
 def clear_dialogue() -> None:
-    """Очистить диалог в RAM (⌘G / старт copilot). Файл data/transcript.md не трогаем."""
+    """Очистить диалог в RAM (⌘G / старт copilot)."""
     global _pending_self_utterance, _dialogue_lines, _answer_speaker_pin, _answer_target_pin
     _cancel_pending_flush_timer()
     with _lock:

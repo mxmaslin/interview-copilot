@@ -179,7 +179,9 @@ class CopilotApp(rumps.App):
                 callback=self.on_screenshot_solve,
             ),
             None,
-            rumps.MenuItem("Открыть data/transcript.md", callback=self.on_open_transcript),
+            rumps.MenuItem(
+                "Показать диалог в терминале", callback=self.on_show_dialogue
+            ),
             rumps.MenuItem("Открыть последний ответ", callback=self.on_open_last_answer),
             rumps.MenuItem(
                 "Открыть ответ по скриншоту",
@@ -1047,12 +1049,13 @@ class CopilotApp(rumps.App):
         except CursorBridgeError as e:
             rumps.alert("Cursor", str(e))
 
-    def on_open_transcript(self, _: object) -> None:
-        from .transcript import flush_transcript_to_disk
+    def on_show_dialogue(self, _: object) -> None:
+        from .transcript import format_dialogue_for_terminal
 
-        path = flush_transcript_to_disk()
-        subprocess_open = __import__("subprocess")
-        subprocess_open.run(["open", str(path)], check=False)
+        log("\n[copilot] —— диалог (RAM) ——")
+        for line in format_dialogue_for_terminal().splitlines():
+            log(line)
+        log("[copilot] —— конец диалога ——\n")
 
     def on_quit(self, _: object) -> None:
         reset_call_mic_muted()

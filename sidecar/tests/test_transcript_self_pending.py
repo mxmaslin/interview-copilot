@@ -5,9 +5,6 @@ import copilot.transcript as transcript
 
 def test_pending_self_merges_before_write(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("STT_PENDING_FLUSH_SEC", "0")
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
 
     assert transcript.append_line("self", "Расскажи, что знаешь про...") is None
     assert transcript.pending_self_utterance() == "Расскажи, что знаешь про..."
@@ -18,9 +15,6 @@ def test_pending_self_merges_before_write(tmp_path, monkeypatch) -> None:
 
 def test_flush_pending_before_answer(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("STT_PENDING_FLUSH_SEC", "0")
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(transcript, "call_mic_muted_effective", lambda: True)
 
     transcript.append_line("self", "Расскажи, что знаешь про...")

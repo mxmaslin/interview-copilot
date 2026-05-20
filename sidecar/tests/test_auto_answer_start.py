@@ -20,9 +20,6 @@ def _bare_app(monkeypatch) -> CopilotApp:
 def test_question_for_auto_uses_interviewer_with_mic_muted(
     tmp_path, monkeypatch
 ) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(transcript, "call_mic_muted_effective", lambda: True)
 
     transcript.append_line("interviewer", "Что такое GIL?")

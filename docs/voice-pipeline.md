@@ -5,7 +5,7 @@
 ```
 Микрофон / BlackHole → сегментация (тишина, min speech, max segment)
     → Whisper STT (live без initial_prompt, финал с prompt)
-    → transcript.md ([Интервьюер] / [Я])
+    → RAM transcript ([Интервьюер] / [Я])
     → ⌘↩ или ANSWER_AUTO → LLM → терминал + data/last-answer.md
 ```
 
@@ -16,7 +16,7 @@
 | Режим | Когда | Куда |
 |--------|--------|------|
 | **Rolling** (`STT_ROLLING=1`) | Каждые ~2 с речи | «Интервьюер/Я (live)» в терминал |
-| **Финал** | Пауза (`AUDIO_SILENCE_SEC*`) | `data/transcript.md` |
+| **Финал** | Пауза (`AUDIO_SILENCE_SEC*`) | RAM (`transcript.py`) |
 
 Подробно: [audio-setup.md](audio-setup.md).
 

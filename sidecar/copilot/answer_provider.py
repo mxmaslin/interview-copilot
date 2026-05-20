@@ -74,6 +74,16 @@ def _no_question_error() -> str:
     return "Нет реплики [Интервьюер] в транскрипте."
 
 
+def cursor_answer_payload() -> dict[str, str]:
+    """Вопрос и контекст для Cursor SDK (RAM → env, без transcript.md)."""
+    question, speaker = _resolved_question()
+    context = ""
+    if not answer_minimal_context():
+        if not (speaker == "self" and call_mic_muted_effective()):
+            context = compact_dialogue_context(answer_context_chars())
+    return {"question": question, "speaker": speaker, "context": context}
+
+
 def _resolved_question() -> tuple[str, str]:
     target = last_answer_target()
     if not target:

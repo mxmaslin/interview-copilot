@@ -41,7 +41,7 @@ def test_session_lifecycle(tmp_path, monkeypatch) -> None:
     assert "Расскажите про опыт" in review
     assert "OAuth" in review
     assert "Ответ Copilot" in review
-    assert (d1 / "transcript.md").read_text(encoding="utf-8").find("[Я]:") >= 0
+    assert not (d1 / "transcript.md").exists()
 
     meta = json.loads((d1 / "meta.json").read_text(encoding="utf-8"))
     assert meta["status"] == "completed"

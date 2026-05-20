@@ -6,9 +6,6 @@ import copilot.transcript as transcript
 def test_pin_answer_targets_interviewer_despite_trailing_self(
     tmp_path, monkeypatch
 ) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     monkeypatch.setattr(transcript, "call_mic_muted_effective", lambda: True)
 
     transcript.append_line("interviewer", "Расскажи про Python")

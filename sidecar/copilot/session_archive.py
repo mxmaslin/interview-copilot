@@ -9,8 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from .config import DATA_DIR
-from .transcript import dialogue_lines, export_transcript_markdown
-
 SESSIONS_DIR = DATA_DIR / "sessions"
 
 _lock = threading.Lock()
@@ -59,7 +57,6 @@ def start_session() -> Path | None:
             encoding="utf-8",
         )
         (d / "turns.jsonl").write_text("", encoding="utf-8")
-        _sync_transcript_locked(d)
         return d
 
 
@@ -156,7 +153,6 @@ def record_answer_turn(
                 else:
                     counts["turns_completed"] += 1
         _update_meta_locked(d, **counts)
-        _sync_transcript_locked(d)
 
 
 def record_screenshot_turn(
@@ -192,7 +188,6 @@ def record_screenshot_turn(
         }
         with (d / "turns.jsonl").open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
-        _sync_transcript_locked(d)
 
 
 def end_session() -> Path | None:
@@ -205,14 +200,6 @@ def end_session() -> Path | None:
         _finalize_locked(d)
         _session_dir = None
         return d
-
-
-def _sync_transcript_locked(session_dir: Path) -> None:
-    if not dialogue_lines():
-        text = "# Interview transcript\n\n(пусто)\n"
-    else:
-        text = export_transcript_markdown()
-    (session_dir / "transcript.md").write_text(text, encoding="utf-8")
 
 
 def _update_meta_locked(session_dir: Path, **fields: Any) -> None:
@@ -231,7 +218,6 @@ def _update_meta_locked(session_dir: Path, **fields: Any) -> None:
 
 
 def _finalize_locked(session_dir: Path) -> None:
-    _sync_transcript_locked(session_dir)
     _update_meta_locked(
         session_dir,
         ended_at=_utc_now(),

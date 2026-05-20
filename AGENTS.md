@@ -76,13 +76,13 @@
 
 ## Архив сессий (разбор качества)
 
-При **CP → Выход** (или новый `copilot`) — `data/sessions/<YYYY-MM-DD_HH-MM-SS>/`: `transcript.md`, `review.md`, `turns.jsonl`, `meta.json`. На ход: `source` (`hotkey` / `auto` / `barge-in`), `status` (`completed` / `cancelled` / `superseded`), `timing` при `COPILOT_TIMING=1`. См. [docs/copilot-workflow.md](docs/copilot-workflow.md#архив-сессий).
+При **CP → Выход** (или новый `copilot`) — `data/sessions/<YYYY-MM-DD_HH-MM-SS>/`: `review.md`, `turns.jsonl`, `meta.json` (без `transcript.md` — диалог только в RAM). На ход: `source` (`hotkey` / `auto` / `barge-in`), `status` (`completed` / `cancelled` / `superseded`), `timing` при `COPILOT_TIMING=1`. См. [docs/copilot-workflow.md](docs/copilot-workflow.md#архив-сессий).
 
 ## Формат ответов (⌘↩ / транскрипт)
 
 - Отвечай **только на заданный вопрос**; не подменяй тему шаблоном про стек.
 - Язык: **русский**; EN-термины как принято.
-- Учитывай контекст диалога sidecar (RAM; снимок в `data/sessions/…/transcript.md` при выходе).
+- Учитывай контекст диалога sidecar (только RAM в текущей сессии).
 - Про опыт и проекты — **только факты из резюме**.
 - 5–10 предложений; для live coding — шаги и сложность, если спросили задачу.
 
@@ -91,7 +91,7 @@
 - `[Интервьюер]:` — звук созвона (BlackHole) и/или **Telegram** (`TELEGRAM_INPUT_ENABLED=1`, см. `docs/telegram-input.md`); в терминал при `TERMINAL_SHOW_INTERVIEWER=1`; STT — **Начать прослушивание**
 - `[Я]:` — микрофон (`AUDIO_INPUT_SELF`); в терминал при `TERMINAL_SHOW_SELF=1`
 
-На **⌘↩** — последние сегменты с конца (`ANSWER_INTERVIEWER_MERGE_MAX=2`): обычно `[Интервьюер]`; `[Я]` — **одна** последняя реплика (`ANSWER_SELF_MERGE_MAX=1`). **⌘↩** на `[Я]` сначала режет буфер микрофона и делает синхронный финальный STT (не stale live). Диалог хранится **в RAM** (`transcript.py`); на диск не пишется на каждую реплику — только архив при выходе и **CP → Открыть транскрипт** (снимок в `data/transcript.md`). Старт `copilot` / **⌘G** — очистка RAM. STT: live в терминал; финал в RAM после паузы. См. `docs/audio-setup.md`.
+На **⌘↩** — последние сегменты с конца (`ANSWER_INTERVIEWER_MERGE_MAX=2`): обычно `[Интервьюер]`; `[Я]` — **одна** последняя реплика (`ANSWER_SELF_MERGE_MAX=1`). **⌘↩** на `[Я]` сначала режет буфер микрофона и делает синхронный финальный STT (не stale live). Диалог **только в RAM** (`transcript.py`); на диск не пишется. **CP → Показать диалог в терминале** — вывод RAM в терминал. Старт `copilot` / **⌘G** — очистка RAM. STT: live в терминал; финал в RAM после паузы. См. `docs/audio-setup.md`.
 
 **STT и скриншот:** скрин **⌘⌃⇧4** глушит микрофон, пока очередь скриншотов не пуста; затем STT снова включается, если было **Начать прослушивание**. **⌘↩** (в т.ч. после Telegram) **не блокируется** очередью скринов — ответ и скриншоты параллельно. **⌘↩** с `deepseek` STT не глушит. Telegram polling с момента запуска `copilot`. См. `docs/audio-setup.md`, `docs/telegram-input.md`.
 

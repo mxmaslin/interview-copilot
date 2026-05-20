@@ -18,9 +18,6 @@ def _bare_app(monkeypatch) -> CopilotApp:
 def test_begin_interview_clears_transcript_and_enables_hotkeys(
     tmp_path, monkeypatch
 ) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
     set_interview_active(False)
 
     app = _bare_app(monkeypatch)

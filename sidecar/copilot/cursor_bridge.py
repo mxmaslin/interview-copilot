@@ -125,7 +125,9 @@ def _log_sdk_stderr(stderr: str) -> None:
         log("[cursor-agent]", ln)
 
 
-def _cursor_sdk_env() -> dict[str, str]:
+def _cursor_sdk_env(*, with_answer_payload: bool = False) -> dict[str, str]:
+    import base64
+
     key = cursor_api_key()
     if not key:
         raise CursorBridgeError(
@@ -139,6 +141,14 @@ def _cursor_sdk_env() -> dict[str, str]:
         "SCREENSHOT_MINIMAL_PROMPT": "1" if screenshot_minimal_prompt() else "0",
         "SCREENSHOT_REUSE_AGENT": "1" if screenshot_reuse_agent() else "0",
     }
+    if with_answer_payload:
+        from .answer_provider import cursor_answer_payload
+
+        payload = cursor_answer_payload()
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        env["COPILOT_ANSWER_PAYLOAD_B64"] = base64.standard_b64encode(raw).decode(
+            "ascii"
+        )
     return env
 
 
@@ -148,7 +158,7 @@ def _run_node(command: str, *extra: str, timeout: int = _TIMEOUT_START) -> dict:
     if not agent_script.exists():
         raise CursorBridgeError(f"Не найден {agent_script}")
 
-    env = _cursor_sdk_env()
+    env = _cursor_sdk_env(with_answer_payload=command == "answer")
     cmd = ["node", str(agent_script), command, f"--cwd={REPO_ROOT}", *extra]
 
     proc = subprocess.Popen(
@@ -243,7 +253,7 @@ def _run_node_stream(
     if not agent_script.exists():
         raise CursorBridgeError(f"Не найден {agent_script}")
 
-    env = _cursor_sdk_env()
+    env = _cursor_sdk_env(with_answer_payload=command == "answer")
     cmd = ["node", str(agent_script), command, f"--cwd={REPO_ROOT}", *extra]
 
     proc = subprocess.Popen(

@@ -24,7 +24,7 @@ description: >-
 | Режим | Поведение |
 |-------|-----------|
 | **Rolling** (`STT_ROLLING=1`) | Каждые ~2 с речи → **«Интервьюер (live)»** в терминал (быстрый Whisper). |
-| **Финал** | Пауза ~0.4 с → реплика в RAM + авто-ответ; файл только при выходе/«Открыть транскрипт». |
+| **Финал** | Пауза ~0.4 с → реплика в RAM + авто-ответ; на диск не пишется. |
 
 Переменные: `STT_LATENCY=fast`, `STT_FAST_FINAL=1`, `WHISPER_GLOSSARY_FIXES`, `AUDIO_PRESET=interview`, `ANSWER_BARGE_IN_ON_SPEECH=interviewer`, `COPILOT_TIMING=1`, `STT_LIVE_MIN_WORDS=2`. Анализ latency: `python scripts/analyze-session-timing.py`. Доки: `docs/voice-pipeline.md`, `docs/stt-glossary.md`.
 
@@ -47,7 +47,7 @@ description: >-
 |---------|------|
 | Menubar / hotkeys | `sidecar/copilot/app.py` |
 | Сегментация аудио | `sidecar/copilot/listener.py` |
-| Rolling / live / merge | `stt_segment.py`, `stt_live.py`, `transcript.py` (RAM, `flush_transcript_to_disk`) |
+| Rolling / live / merge | `stt_segment.py`, `stt_live.py`, `transcript.py` (RAM only) |
 | Whisper / glossary | `stt.py`, `stt_prompt.py`, `stt_glossary.py`, `config.py` |
 | Endpointing | `endpointing.py` |
 | Тайминги / ходы ответа | `pipeline_timing.py`, `answer_turn.py` |

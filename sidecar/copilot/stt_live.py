@@ -112,7 +112,7 @@ def sanitize_live_transcript(text: str) -> str:
 
 
 def live_question_supersedes_file(file_question: str | None, live: str) -> bool:
-    """Live rolling важнее последней строки в transcript.md."""
+    """Live rolling важнее последней строки в RAM-диалоге."""
     from difflib import SequenceMatcher
 
     live = sanitize_live_transcript(live)
