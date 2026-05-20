@@ -34,6 +34,17 @@ description: >-
 
 `data/sessions/<stamp>/` — `turns.jsonl` (source, status, timing), `review.md`, `meta.json`. Пишется на каждый ответ и при **CP → Выход**. Статусы: `completed`, `cancelled` (повторный ⌘↩), `superseded` (устаревший worker).
 
+## Troubleshooting (полевой UX)
+
+| Симптом | Причина | Действие |
+|---------|---------|----------|
+| Каша в терминале (два ответа в одном блоке) | Повторный ⌘↩ при `ANSWER_PROVIDER=deepseek` во время стрима | Дождаться конца ответа; не дублировать ⌘↩; или `cursor` |
+| `timing: … speaker=self` на все вопросы | Соло: только Brio, нет `[Интервьюер]` | Для созвона — BlackHole; см. `docs/audio-setup.md` |
+| Hint «stt пуст» на ⌘↩ | Ответ по **live**, финал ещё не в RAM | Норма; можно озвучивать по live |
+| Два одинаковых ответа (Kafka…) | Два ⌘↩ на тот же вопрос | Не повторять hotkey; **⌘G** при смене темы |
+
+См. `docs/copilot-workflow.md` § «Ограничения и UX».
+
 ## Ответы агента в Cursor
 
 - Резюме: `@context/resume.md` — только факты оттуда.

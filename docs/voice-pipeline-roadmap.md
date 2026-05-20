@@ -39,7 +39,8 @@ Copilot — **voice-augmented sidecar**: STT → LLM → текст. План п
 - [ ] Тишина — нет нарастания prompt-echo в live
 - [x] Одна фраза → одна строка в RAM-диалоге
 - [ ] ⌘↩ на live «про Kafka» — вопрос не «Привет…»
-- [ ] Повторный ⌘↩ — не пишет устаревший ответ в `last-answer.md`
+- [x] Повторный ⌘↩ — не пишет устаревший ответ в `last-answer.md` (`superseded`)
+- [ ] Повторный ⌘↩ при `deepseek` — **abort HTTP-стрим** (сейчас чанки могут перемешаться в терминале)
 - [ ] `timing:` после ответа
 
 ### Фаза 3 — endpointing (реализовано)
@@ -74,6 +75,7 @@ python scripts/analyze-session-timing.py 2026-05-20_18-22-52
 | Большой `llm_ttft` | модель / `ANSWER_MINIMAL_CONTEXT` / `ANSWER_MAX_TOKENS` |
 | Большой `stt` | `AUDIO_PRESET`, `AUDIO_SILENCE_SEC_*`, `STT_LATENCY=fast` |
 | Нет `stt` при ⌘↩ на live | норма; hint в терминале |
+| Каша в терминале при быстром ⌘↩ | не жать ⌘↩ до конца стрима; или `ANSWER_PROVIDER=cursor`; см. copilot-workflow § Ограничения |
 
 ### Фаза 8 — STT QoS (реализовано)
 

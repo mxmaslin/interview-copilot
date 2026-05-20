@@ -67,8 +67,10 @@ COPILOT_TIMING=1
 
 ## Turn-taking ответа (фаза 4 + 9)
 
-- Повторный **⌘↩** отменяет SDK и инвалидирует generation (`answer_turn`) — прерванный ответ **не** перезаписывает `last-answer.md`.
-- **Barge-in по речи** (`ANSWER_BARGE_IN_ON_SPEECH`, по умолчанию `interviewer`): новая реплика на канале во время генерации — та же отмена, `source=barge-in` в архиве.
+- Повторный **⌘↩** / **barge-in** инвалидирует generation (`answer_turn`) — устаревший ответ **не** перезаписывает `last-answer.md`; в архиве `cancelled` / `superseded`.
+- **`ANSWER_PROVIDER=cursor`:** повторный ⌘↩ вызывает `cancel_active_sdk()` — subprocess обрывается.
+- **`deepseek` / `openai`:** отмена только на уровне логики хода; **HTTP-стрим может продолжать печатать** в терминал → риск перемешивания двух ответов. См. [copilot-workflow.md § Ограничения](copilot-workflow.md#ограничения-и-ux-по-полевым-прогонам).
+- **Barge-in по речи** (`ANSWER_BARGE_IN_ON_SPEECH`, по умолчанию `interviewer`): новая реплика на канале во время генерации — та же отмена, `source=barge-in` в архиве (для DeepSeek — та же оговорка про стрим).
 - `pin_answer_target` — LLM видит тот же вопрос, что показан в терминале.
 
 ## STT QoS (фаза 8)
