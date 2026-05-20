@@ -119,7 +119,12 @@ def test_last_self_question_merges(tmp_path, monkeypatch) -> None:
     path = tmp_path / "transcript.md"
     monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
     monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    import copilot.config as cfg
 
+    monkeypatch.setattr(cfg, "answer_self_merge_max", lambda: 2)
+    monkeypatch.setattr(transcript, "call_mic_muted_effective", lambda: False)
+
+    transcript.append_line("interviewer", "начало")
     transcript.append_line("self", "Что такое GIL")
     transcript.append_line("self", "и asyncio")
 
@@ -148,10 +153,23 @@ def test_last_answer_target_interviewer_when_both(tmp_path, monkeypatch) -> None
     transcript.append_line("self", "Мой ответ")
     transcript.append_line("self", "Уточни про кэш")
 
-    assert transcript.last_answer_target() == (
-        "Мой ответ Уточни про кэш",
-        "self",
-    )
+    assert transcript.last_answer_target() == ("Уточни про кэш", "self")
+
+
+def test_call_mic_muted_only_latest_self_not_merged(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "transcript.md"
+    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
+    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
+    import copilot.config as cfg
+
+    monkeypatch.setattr(cfg, "call_mic_muted_on_call", lambda: False)
+    transcript.set_call_mic_muted_runtime(True)
+
+    transcript.append_line("self", "Привет, слышишь меня?")
+    transcript.append_line("self", "Дословная транскрипция русской разговорной речи")
+    transcript.append_line("self", "Как твоё настроение?")
+
+    assert transcript.last_answer_target() == ("Как твоё настроение?", "self")
 
 
 def test_call_mic_muted_ignores_trailing_interviewer(tmp_path, monkeypatch) -> None:

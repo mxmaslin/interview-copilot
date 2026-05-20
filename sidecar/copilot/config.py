@@ -104,7 +104,7 @@ def answer_interviewer_merge_max() -> int:
 
 def answer_self_merge_max() -> int:
     try:
-        return max(1, int(_env("ANSWER_SELF_MERGE_MAX", "3")))
+        return max(1, int(_env("ANSWER_SELF_MERGE_MAX", "1")))
     except ValueError:
         return 3
 

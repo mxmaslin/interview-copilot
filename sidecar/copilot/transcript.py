@@ -163,12 +163,21 @@ def _merged_block_from_end(
     return " ".join(parts)
 
 
-def last_self_question() -> str | None:
-    """Последний блок [Я] с конца (подряд идущие реплики склеиваются)."""
+def _self_question_merge_max() -> int:
+    """Склеивать [Я] только при явном ANSWER_SELF_MERGE_MAX>1 (длинная фраза с паузой)."""
     from .config import answer_self_merge_max
 
+    if call_mic_muted_effective():
+        return 1
+    if answer_self_questions_active() and not has_interviewer_lines():
+        return 1
+    return answer_self_merge_max()
+
+
+def last_self_question() -> str | None:
+    """Последний блок [Я] с конца; по умолчанию один сегмент — не тащить старые вопросы."""
     return _merged_block_from_end(
-        "[Я]:", _self_text, max_parts=answer_self_merge_max()
+        "[Я]:", _self_text, max_parts=_self_question_merge_max()
     )
 
 

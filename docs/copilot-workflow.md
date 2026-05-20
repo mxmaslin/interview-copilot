@@ -20,7 +20,7 @@ copilot   # Terminal.app / iTerm, не терминал Cursor
 | **Начать прослушивание** | STT: BlackHole (интервьюер) + микрофон (я) |
 | **Остановить прослушивание** | Выключить STT |
 | **Ответ на последний вопрос (⌘↩)** | DeepSeek / OpenAI / Cursor → терминал + `data/last-answer.md` |
-| **Микрофон на созвоне выкл** | ⌘↩ **только** на последний `[Я]`; старый `[Интервьюер]` игнорируется; состояние сохраняется в `data/call-mic-muted` |
+| **Микрофон на созвоне выкл** | ⌘↩ на **одну** последнюю реплику `[Я]` (не склеивать старые вопросы); `[Интервьюер]` игнорируется; флаг в `data/call-mic-muted` |
 | **Очистить транскрипт (⌘G)** | Новый вопрос без старых реплик |
 | **Решить скриншот (⌘⌃⇧4)** | Vision из буфера (или авто-watcher) |
 | **Открыть transcript / ответы** | Файлы в редакторе |
@@ -60,6 +60,7 @@ copilot   # Terminal.app / iTerm, не терминал Cursor
 ```env
 ANSWER_PROVIDER=deepseek
 ANSWER_SELF_QUESTIONS=auto      # solo / CALL_MIC_MUTED / меню «микрофон выкл»
+ANSWER_SELF_MERGE_MAX=1         # [Я]: один сегмент; >1 — только если одна фраза рвётся на паузах
 ANSWER_INTERVIEWER_MERGE_MAX=2  # не склеивать весь звонок в один «вопрос»
 CALL_MIC_MUTED=0
 SCREENSHOT_SOLVE_ENABLED=1

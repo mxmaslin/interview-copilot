@@ -450,9 +450,18 @@ function lastInterviewerQuestion(transcript) {
   return mergedBlockFromEnd(dialogue, "[Интервьюер]:", "[Я]:", cap);
 }
 
+function selfQuestionMergeMax(transcript) {
+  if (callMicMutedEffective()) return 1;
+  if (answerSelfQuestionsActive(transcript)) {
+    const dialogue = dialogueLines(transcript);
+    if (!dialogue.some((l) => l.startsWith("[Интервьюер]:"))) return 1;
+  }
+  return envInt("ANSWER_SELF_MERGE_MAX", 1);
+}
+
 function lastSelfQuestion(transcript) {
   const dialogue = dialogueLines(transcript);
-  const cap = envInt("ANSWER_SELF_MERGE_MAX", 3);
+  const cap = selfQuestionMergeMax(transcript);
   return mergedBlockFromEnd(dialogue, "[Я]:", "[Интервьюер]:", cap);
 }
 
@@ -567,7 +576,14 @@ function buildAnswerPrompt(transcript, question, speaker) {
       : "Вопрос интервьюера";
   const minimal = envBool("CURSOR_ANSWER_MINIMAL");
   const maxChars = envInt("CURSOR_ANSWER_CONTEXT_CHARS", 800);
-  const context = minimal ? "" : compactDialogueContext(transcript, maxChars);
+  let context = "";
+  if (!minimal) {
+    if (speaker === "self" && callMicMutedEffective()) {
+      context = "";
+    } else {
+      context = compactDialogueContext(transcript, maxChars);
+    }
+  }
   const system = buildAnswerSystemPrompt();
   const ctxBlock = context ? `\n\nКраткий контекст диалога:\n${context}` : "";
   return `${system}

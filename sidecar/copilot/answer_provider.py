@@ -36,6 +36,7 @@ from .interview_prompt import build_system_prompt, build_user_message as build_a
 from .session_archive import record_answer_turn
 from .transcript import (
     answer_self_questions_active,
+    call_mic_muted_effective,
     compact_dialogue_context,
     last_answer_line,
     last_answer_target,
@@ -78,7 +79,11 @@ def _build_messages() -> tuple[str, str]:
     question, speaker = target
     context = ""
     if not answer_minimal_context():
-        context = compact_dialogue_context(answer_context_chars())
+        if speaker == "self" and call_mic_muted_effective():
+            # Не подмешивать старые [Я] в контекст — иначе модель повторяет прошлый ответ.
+            context = ""
+        else:
+            context = compact_dialogue_context(answer_context_chars())
     user = build_answer_user_message(
         question, speaker=speaker, dialogue_context=context
     )
