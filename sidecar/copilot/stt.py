@@ -18,12 +18,17 @@ from .config import (
     stt_provider,
     whisper_api_model,
     whisper_beam_size,
+    whisper_compression_ratio_threshold,
     whisper_compute_type,
     whisper_condition_on_previous,
     whisper_cpu_threads,
     whisper_device,
+    whisper_hotwords,
     whisper_local_size,
+    whisper_log_prob_threshold,
+    whisper_no_speech_threshold,
     whisper_patience,
+    whisper_repetition_penalty,
     whisper_temperature,
     whisper_vad_filter,
 )
@@ -163,10 +168,20 @@ def _whisper_transcribe_kwargs(*, live: bool = False) -> dict:
         "condition_on_previous_text": whisper_condition_on_previous(live=live),
         "without_timestamps": True,
         "temperature": whisper_temperature(live=live),
+        "compression_ratio_threshold": whisper_compression_ratio_threshold(),
+        "log_prob_threshold": whisper_log_prob_threshold(),
+        "no_speech_threshold": whisper_no_speech_threshold(),
+        "suppress_blank": True,
     }
+    rep = whisper_repetition_penalty()
+    if rep > 1.0:
+        kwargs["repetition_penalty"] = rep
     patience = whisper_patience(live=live)
     if patience > 0:
         kwargs["patience"] = patience
+    hw = whisper_hotwords()
+    if hw and live:
+        kwargs["hotwords"] = hw
     return kwargs
 
 

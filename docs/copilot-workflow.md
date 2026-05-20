@@ -9,7 +9,7 @@ source scripts/activate-venv.sh
 copilot   # Terminal.app / iTerm, не терминал Cursor
 ```
 
-- При старте: сессия интервью **сразу** (hotkeys активны), `data/transcript.md` **сбрасывается**.
+- При старте: сессия интервью **сразу** (hotkeys активны), диалог в **RAM** сбрасывается.
 - Выход: **CP → Выход** или **Ctrl+C** в терминале с `copilot`.
 - Зависший процесс: `./scripts/kill-sidecar.sh`
 
@@ -26,7 +26,7 @@ copilot   # Terminal.app / iTerm, не терминал Cursor
 | **Открыть transcript / ответы** | Файлы в редакторе |
 | **Выход** | Остановить sidecar |
 
-Ручной ввод реплик, привязка Agents chatId, отмена SDK — только через `.env` / правку `transcript.md` (см. `AGENTS.md`).
+Ручной ввод реплик — через Telegram или STT; снимок на диск: **CP → Открыть транскрипт** (`flush_transcript_to_disk`). См. `AGENTS.md`.
 
 ## Hotkeys
 
@@ -49,7 +49,7 @@ copilot   # Terminal.app / iTerm, не терминал Cursor
 
 После **CP → Выход** (или нового `copilot`) сессия сохраняется в `data/sessions/<дата-время>/`:
 
-- `transcript.md` — полный диалог
+- `transcript.md` — снимок диалога из RAM при выходе
 - `review.md` — вопросы и ответы Copilot по ходам (источник, статус, тайминг)
 - `turns.jsonl` — машиночитаемый лог ходов (для скриптов и сводок)
 - `meta.json` — время начала/конца, счётчики `turns_completed` / `turns_cancelled` / `turns_superseded`

@@ -263,6 +263,23 @@ def clear_interviewer_transcript_live() -> None:
     sys.stdout.flush()
 
 
+def _merge_live_chunk(prev: str, chunk: str) -> str:
+    """Не склеивать новую фразу со старой («Привет» + «Как слышишь»)."""
+    from difflib import SequenceMatcher
+
+    p = (prev or "").strip()
+    c = (chunk or "").strip()
+    if not c:
+        return p
+    if not p or p == "…":
+        return c
+    if c.lower().startswith(p.lower()[: min(16, len(p))]):
+        return c
+    if SequenceMatcher(None, p.lower(), c.lower()).ratio() < 0.42:
+        return c
+    return f"{p} {c}".strip()
+
+
 def print_interviewer_transcript_live(text: str, *, final: bool) -> None:
     """Rolling STT: частичный текст во время речи; final — завершённая реплика."""
     global _live_interviewer_line
@@ -273,17 +290,30 @@ def print_interviewer_transcript_live(text: str, *, final: bool) -> None:
         _live_interviewer_line = ""
         print_interviewer_transcript(chunk)
         return
-    prev = _live_interviewer_line
-    if prev and chunk.lower().startswith(prev.lower()[: min(16, len(prev))]):
-        merged = chunk
-    else:
-        merged = f"{prev} {chunk}".strip() if prev else chunk
+    merged = _merge_live_chunk(_live_interviewer_line, chunk)
     cleaned = sanitize_live_transcript(merged)
     _live_interviewer_line = cleaned if cleaned else merged
     head = _c("1;33", "Интервьюер (live)") if _use_color() else "Интервьюер (live)"
     line = _wrap_block(_live_interviewer_line, indent="")
     out = "\n".join([head, *line, ""])
     sys.stdout.write("\x1b[2K\r" + out)
+    sys.stdout.flush()
+
+
+def print_self_transcript_decoding() -> None:
+    """Сразу после паузы — пока Whisper считает финал."""
+    global _live_self_line
+    _live_self_line = "…"
+    head = _c("1;36", "Я (live)") if _use_color() else "Я (live)"
+    sys.stdout.write("\x1b[2K\r" + head + "\n…\n")
+    sys.stdout.flush()
+
+
+def print_interviewer_transcript_decoding() -> None:
+    global _live_interviewer_line
+    _live_interviewer_line = "…"
+    head = _c("1;33", "Интервьюер (live)") if _use_color() else "Интервьюер (live)"
+    sys.stdout.write("\x1b[2K\r" + head + "\n…\n")
     sys.stdout.flush()
 
 
@@ -296,11 +326,7 @@ def print_self_transcript_live(text: str, *, final: bool) -> None:
         _live_self_line = ""
         print_self_transcript(chunk)
         return
-    prev = _live_self_line
-    if prev and chunk.lower().startswith(prev.lower()[: min(16, len(prev))]):
-        merged = chunk
-    else:
-        merged = f"{prev} {chunk}".strip() if prev else chunk
+    merged = _merge_live_chunk(_live_self_line, chunk)
     cleaned = sanitize_live_transcript(merged)
     _live_self_line = cleaned if cleaned else merged
     head = _c("1;36", "Я (live)") if _use_color() else "Я (live)"

@@ -27,20 +27,26 @@ _HALLUCINATION_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"смотрите\s+на\s+видео",
         r"^\s*смеш\w*\.?\s*$",
         r"(?:^|\s)смеш\w*(?:\s+смеш\w*){2,}",
+        r"^\s*дюм\w*!?\s*$",
+        r"^\s*дюма!?\s*$",
     )
 )
 
-_LAUGHTER_PREFIX_RE = re.compile(r"^(?:\s*смеш\w*\.?\s*)+", re.IGNORECASE)
+_ARTIFACT_PREFIX_RE = re.compile(
+    r"^(?:(?:\s*смеш\w*\.?\s*)+|(?:\s*дюм\w*!?\s*)+)",
+    re.IGNORECASE,
+)
 
 
 def strip_laughter_artifacts(text: str) -> str:
-    """Убрать «Смешка» и повторы — типичный мусор Whisper на Brio/тишине."""
+    """Убрать «Смешка», «Дюма!» и похожий мусор Whisper на Brio/тишине."""
     t = (text or "").strip()
     if not t:
         return ""
-    t = _LAUGHTER_PREFIX_RE.sub("", t)
+    t = _ARTIFACT_PREFIX_RE.sub("", t)
     t = re.sub(r"\bсмеш\w*\.?\b", " ", t, flags=re.IGNORECASE)
-    return re.sub(r"\s+", " ", t).strip(" ,.?…")
+    t = re.sub(r"\bдюм\w*!?\b", " ", t, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", t).strip(" ,.…")
 
 
 def is_stt_hallucination(text: str) -> bool:

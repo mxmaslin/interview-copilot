@@ -4,19 +4,15 @@ from __future__ import annotations
 
 import json
 
+import copilot.transcript as tr
 from copilot import session_archive
 
 
 def test_session_lifecycle(tmp_path, monkeypatch) -> None:
     sessions = tmp_path / "sessions"
-    transcript = tmp_path / "transcript.md"
     monkeypatch.setattr(session_archive, "SESSIONS_DIR", sessions)
-    monkeypatch.setattr(session_archive, "TRANSCRIPT_PATH", transcript)
 
-    transcript.write_text(
-        "# Interview transcript\n\n[Интервьюер]: Расскажите про опыт\n",
-        encoding="utf-8",
-    )
+    tr.append_line("interviewer", "Расскажите про опыт")
 
     d1 = session_archive.start_session()
     assert d1 is not None
@@ -37,10 +33,7 @@ def test_session_lifecycle(tmp_path, monkeypatch) -> None:
         source="hotkey",
         status="cancelled",
     )
-    transcript.write_text(
-        transcript.read_text(encoding="utf-8") + "[Я]: уточнение\n",
-        encoding="utf-8",
-    )
+    tr.append_line("self", "да уточнение")
     d2 = session_archive.end_session()
     assert d2 == d1
 

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import DATA_DIR, TRANSCRIPT_PATH
+from .config import DATA_DIR
+from .transcript import dialogue_lines, export_transcript_markdown
 
 SESSIONS_DIR = DATA_DIR / "sessions"
 
@@ -208,13 +208,11 @@ def end_session() -> Path | None:
 
 
 def _sync_transcript_locked(session_dir: Path) -> None:
-    if TRANSCRIPT_PATH.is_file():
-        shutil.copy2(TRANSCRIPT_PATH, session_dir / "transcript.md")
+    if not dialogue_lines():
+        text = "# Interview transcript\n\n(пусто)\n"
     else:
-        (session_dir / "transcript.md").write_text(
-            "# Interview transcript\n\n(пусто)\n",
-            encoding="utf-8",
-        )
+        text = export_transcript_markdown()
+    (session_dir / "transcript.md").write_text(text, encoding="utf-8")
 
 
 def _update_meta_locked(session_dir: Path, **fields: Any) -> None:

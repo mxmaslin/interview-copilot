@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from .config import copilot_llm_slow_ms, copilot_stt_slow_ms
+from .config import (
+    audio_preset,
+    copilot_llm_slow_ms,
+    copilot_stt_slow_ms,
+    silence_seconds,
+    stt_latency_preset,
+)
 
 
 def suggest_tuning_hints(record: dict[str, Any]) -> list[str]:
@@ -19,9 +25,13 @@ def suggest_tuning_hints(record: dict[str, Any]) -> list[str]:
     llm_thr = copilot_llm_slow_ms()
 
     if stt is not None and stt >= stt_thr:
+        preset = audio_preset() or "(не задан)"
+        sil_self = silence_seconds(speaker="self")
+        lat = stt_latency_preset()
         hints.append(
-            f"STT {stt}ms ≥ {stt_thr}ms: AUDIO_PRESET=call, "
-            "AUDIO_SILENCE_SEC_SELF=0.85, STT_LATENCY=fast или WHISPER_MODEL_SIZE=small"
+            f"STT {stt}ms ≥ {stt_thr}ms: сейчас preset={preset!r}, "
+            f"AUDIO_SILENCE_SEC_SELF≈{sil_self}, STT_LATENCY={lat}; "
+            "если медленно — interview/fast, STT_LATENCY=fast, WHISPER_MODEL_SIZE=small"
         )
     if llm is not None and llm >= llm_thr:
         hints.append(

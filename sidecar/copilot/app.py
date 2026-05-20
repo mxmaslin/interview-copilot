@@ -41,11 +41,14 @@ from .screenshot_solve import (
     solve_screenshot_png,
 )
 from .terminal_display import (
+    clear_interviewer_transcript_live,
     clear_self_transcript_live,
     print_interview_answer,
     print_interviewer_transcript,
+    print_interviewer_transcript_decoding,
     print_interviewer_transcript_live,
     print_self_transcript,
+    print_self_transcript_decoding,
     print_self_transcript_live,
 )
 from .cursor_bridge import (
@@ -136,14 +139,16 @@ class CopilotApp(rumps.App):
             device_hint=audio_device_hint_interviewer(),
             label="интервьюер",
             on_transcript=self._on_transcript_interviewer,
-            on_speech_start=lambda: self._on_speech_barge_in("interviewer"),
+            on_speech_start=lambda: self._on_speech_start("interviewer"),
+            on_utterance_end=self._on_interviewer_utterance_end,
         )
         self._audio_self = AudioListener(
             speaker="self",
             device_hint=audio_device_hint_self(),
             label="я",
             on_transcript=self._on_transcript_self,
-            on_speech_start=lambda: self._on_speech_barge_in("self"),
+            on_speech_start=lambda: self._on_speech_start("self"),
+            on_utterance_end=self._on_self_utterance_end,
         )
         self._telegram = TelegramInterviewerInput(
             on_message=self._on_transcript_interviewer
@@ -220,6 +225,16 @@ class CopilotApp(rumps.App):
             buf = getattr(self, attr, None)
             if buf is not None:
                 buf.clear()
+
+    def _clear_rolling_for(self, speaker: str) -> None:
+        if speaker == "self":
+            self._rolling_self.clear()
+            if interview_active() and terminal_show_self_stt():
+                clear_self_transcript_live()
+        else:
+            self._rolling_interviewer.clear()
+            if interview_active() and terminal_show_interviewer_stt():
+                clear_interviewer_transcript_live()
 
     def _begin_interview(self, *, silent: bool = False) -> None:
         clear_dialogue()
@@ -298,6 +313,58 @@ class CopilotApp(rumps.App):
 
     def _stop_telegram_input(self) -> None:
         self._telegram.stop()
+
+    def _on_speech_start(self, speaker: str) -> None:
+        """Новая реплика: сбросить старый rolling («Привет» не тянется в ⌘↩)."""
+        self._clear_rolling_for(speaker)
+        self._on_speech_barge_in(speaker)
+
+    def _hotkey_sync_stt_flush(self, speaker: str) -> str | None:
+        """⌘↩: синхронный финальный decode текущего буфера микрофона/BlackHole."""
+        from .pipeline_timing import note_speech_end
+        from .stt import STTError, transcribe_pcm16_mono
+        from .stt_filter import is_stt_hallucination
+        from .stt_glossary import apply_glossary_fixes
+
+        listener = (
+            self._audio_self if speaker == "self" else self._audio_interviewer
+        )
+        if not listener.running:
+            return None
+        drained = listener.drain_speech_buffer_for_final()
+        if drained is None:
+            return None
+        pcm, sr = drained
+        note_speech_end(speaker)
+        try:
+            text = transcribe_pcm16_mono(pcm, sr, live=False)
+        except STTError:
+            return None
+        cleaned = apply_glossary_fixes((text or "").strip())
+        if not cleaned or is_stt_hallucination(cleaned):
+            return None
+        self._clear_rolling_for(speaker)
+        if speaker == "self":
+            line = commit_self_text_now(cleaned, force=True)
+            if line and interview_active() and terminal_show_self_stt():
+                print_self_transcript_live(
+                    line.replace("[Я]:", "", 1).strip(), final=True
+                )
+        else:
+            line = commit_interviewer_text_now(cleaned, force=True)
+            if line and interview_active() and terminal_show_interviewer_stt():
+                print_interviewer_transcript_live(
+                    line.replace("[Интервьюер]:", "", 1).strip(), final=True
+                )
+        return cleaned
+
+    def _on_interviewer_utterance_end(self) -> None:
+        if interview_active() and terminal_show_interviewer_stt():
+            print_interviewer_transcript_decoding()
+
+    def _on_self_utterance_end(self) -> None:
+        if interview_active() and terminal_show_self_stt():
+            print_self_transcript_decoding()
 
     def _on_transcript_interviewer(self, text: str, *, final: bool = True) -> None:
         def apply() -> None:
@@ -396,7 +463,7 @@ class CopilotApp(rumps.App):
         return None
 
     def _resolve_hotkey_answer_target(self) -> tuple[str, str] | None:
-        """⌘↩: live rolling важнее устаревшей строки в transcript.md (даже 2–3 слова)."""
+        """⌘↩: сначала синхронный STT буфера микрофона, иначе live/transcript."""
         flush_pending_self_line()
         file_target = last_answer_target()
         file_q = file_target[0] if file_target else None
@@ -408,6 +475,9 @@ class CopilotApp(rumps.App):
         if call_mic_muted_effective() or (
             answer_self_questions_active() and not iv_live
         ):
+            synced = self._hotkey_sync_stt_flush("self")
+            if synced:
+                return (synced, "self")
             if self_live and live_differs_from_file(file_q, self_live):
                 committed = self._commit_live_target("self", self_live)
                 if committed:
@@ -417,6 +487,12 @@ class CopilotApp(rumps.App):
             )
 
         # Иначе: live интервьюера, если есть; иначе [Я] если отличается от файла
+        synced_iv = self._hotkey_sync_stt_flush("interviewer")
+        if synced_iv:
+            return (synced_iv, "interviewer")
+        synced_self = self._hotkey_sync_stt_flush("self")
+        if synced_self:
+            return (synced_self, "self")
         if iv_live and live_differs_from_file(file_q, iv_live):
             committed = self._commit_live_target("interviewer", iv_live)
             if committed:
@@ -972,13 +1048,11 @@ class CopilotApp(rumps.App):
             rumps.alert("Cursor", str(e))
 
     def on_open_transcript(self, _: object) -> None:
-        from .config import TRANSCRIPT_PATH
+        from .transcript import flush_transcript_to_disk
 
-        TRANSCRIPT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        if not TRANSCRIPT_PATH.exists():
-            TRANSCRIPT_PATH.write_text("# Interview transcript\n", encoding="utf-8")
+        path = flush_transcript_to_disk()
         subprocess_open = __import__("subprocess")
-        subprocess_open.run(["open", str(TRANSCRIPT_PATH)], check=False)
+        subprocess_open.run(["open", str(path)], check=False)
 
     def on_quit(self, _: object) -> None:
         reset_call_mic_muted()

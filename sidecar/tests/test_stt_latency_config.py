@@ -16,10 +16,14 @@ def test_stt_latency_fast_defaults(monkeypatch) -> None:
     monkeypatch.setenv("STT_ROLLING", "1")
     monkeypatch.delenv("AUDIO_PRESET", raising=False)
     monkeypatch.delenv("AUDIO_ROLLING_SEC", raising=False)
+    monkeypatch.delenv("STT_PENDING_FLUSH_SEC", raising=False)
     assert config.whisper_local_size() == "small"
     assert config.whisper_beam_size() == 1
-    assert config.max_segment_seconds() == 1.5
+    assert config.max_segment_seconds() == 1.2
     assert config.silence_seconds() == 0.32
+    assert config.audio_block_ms() == 30
+    assert config.stt_live_min_words() == 1
+    assert config.stt_pending_flush_sec() == 0.45
 
 
 def test_stt_latency_balanced_defaults(monkeypatch) -> None:

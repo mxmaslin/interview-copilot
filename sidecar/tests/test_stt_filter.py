@@ -30,5 +30,13 @@ def test_smeshka_stripped_and_filtered() -> None:
     assert not is_stt_hallucination("Смешка Привет")
 
 
+def test_duma_artifact_stripped_and_filtered() -> None:
+    from copilot.stt_filter import strip_laughter_artifacts
+
+    assert strip_laughter_artifacts("Дюма!") == ""
+    assert is_stt_hallucination("Дюма!")
+    assert strip_laughter_artifacts("Дюма! у меня нормально") == "у меня нормально"
+
+
 def test_real_speech_passes() -> None:
     assert not is_stt_hallucination("Что такое GIL в Python?")

@@ -44,6 +44,12 @@ def test_glossary_kafka_session_variants(glossary_on: None) -> None:
     assert apply_glossary_fixes("расскажи что знаешь про кавкад") == (
         "расскажи что знаешь про Kafka"
     )
+    assert apply_glossary_fixes("Расскажи, что знаешь про кахо") == (
+        "Расскажи, что знаешь про Kafka"
+    )
+    assert apply_glossary_fixes("Скажи, что знаешь про катастрофу") == (
+        "Скажи, что знаешь про Kafka"
+    )
 
 
 def test_normalize_question_text(glossary_on: None) -> None:

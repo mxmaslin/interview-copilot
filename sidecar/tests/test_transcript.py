@@ -23,15 +23,11 @@ def _isolated_call_mic_muted(tmp_path, monkeypatch) -> None:
     transcript.set_call_mic_muted_runtime(False)
 
 
-def test_append_line_interviewer(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
-
+def test_append_line_interviewer() -> None:
     line = transcript.append_line("interviewer", "Что такое GIL?")
 
     assert line == "[Интервьюер]: Что такое GIL?"
-    assert "[Интервьюер]: Что такое GIL?" in path.read_text(encoding="utf-8")
+    assert transcript.dialogue_lines() == ["[Интервьюер]: Что такое GIL?"]
 
 
 def test_append_line_self(tmp_path, monkeypatch) -> None:
@@ -97,18 +93,13 @@ def test_last_interviewer_question_stops_at_self(tmp_path, monkeypatch) -> None:
     assert transcript.last_interviewer_question() == "Часть один часть два"
 
 
-def test_clear_dialogue(tmp_path, monkeypatch) -> None:
-    path = tmp_path / "transcript.md"
-    monkeypatch.setattr(transcript, "TRANSCRIPT_PATH", path)
-    monkeypatch.setattr(transcript, "DATA_DIR", tmp_path)
-
+def test_clear_dialogue() -> None:
     transcript.append_line("interviewer", "Вопрос")
     transcript.append_line("self", "Ответ")
     transcript.clear_dialogue()
 
     assert transcript.dialogue_lines() == []
     assert transcript.last_interviewer_line() is None
-    assert "cleared" in path.read_text(encoding="utf-8")
 
 
 def test_last_interviewer_skips_trailing_self(tmp_path, monkeypatch) -> None:
@@ -309,5 +300,4 @@ def test_clear_during_concurrent_append(tmp_path, monkeypatch) -> None:
     t2.join(timeout=5)
 
     assert not errors
-    text = path.read_text(encoding="utf-8")
-    assert "seg-" not in text or "cleared" in text
+    # Гонка append/clear: важно отсутствие исключений и целостность lock.

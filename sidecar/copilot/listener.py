@@ -34,6 +34,7 @@ class AudioListener:
         on_transcript: Callable[[str], None] | None = None,
         *,
         on_speech_start: Callable[[], None] | None = None,
+        on_utterance_end: Callable[[], None] | None = None,
         speaker: str = "interviewer",
         device_hint: str = "",
         label: str = "",
@@ -43,11 +44,18 @@ class AudioListener:
         self._label = label or speaker
         self._on_transcript = on_transcript or self._default_on_transcript
         self._on_speech_start = on_speech_start
+        self._on_utterance_end = on_utterance_end
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._stream = None
         self._device_name = ""
         self._sample_rate = 48000
+        self._capture_lock = threading.Lock()
+        self._buf: list[np.ndarray] = []
+        self._silent_blocks = 0
+        self._speech_blocks = 0
+        self._in_utterance = False
+        self._block_sec = 0.05
 
     def _default_on_transcript(self, text: str) -> None:
         append_line(self._speaker, text)
@@ -83,61 +91,58 @@ class AudioListener:
             self._thread.join(timeout=3.0)
             self._thread = None
 
+    def drain_speech_buffer_for_final(self) -> tuple[np.ndarray, int] | None:
+        """⌘↩: срез текущей речи без ожидания паузы (синхронный STT в app)."""
+        with self._capture_lock:
+            if not self._buf:
+                return None
+            speech_sec = self._speech_blocks * self._block_sec
+            if speech_sec < min_speech_seconds():
+                return None
+            pcm = np.concatenate(self._buf)
+            sr = self._sample_rate
+            self._buf.clear()
+            self._silent_blocks = 0
+            self._speech_blocks = 0
+            self._in_utterance = False
+            return pcm, sr
+
     def _run(self, device_index: int | None, sr: int) -> None:
         import sounddevice as sd
 
         block = max(1, int(sr * audio_block_ms() / 1000.0))
-        block_sec = block / sr
+        self._block_sec = block / sr
         silence_limit = silence_seconds(speaker=self._speaker)
         min_speech = min_speech_seconds()
         max_seg = max_segment_seconds(speaker=self._speaker)
         rms_threshold = audio_rms_threshold(self._speaker)
 
-        buf: list[np.ndarray] = []
-        silent_blocks = 0
-        speech_blocks = 0
-        in_utterance = False
-
         def callback(indata, frames, time_info, status) -> None:  # noqa: ANN001
-            nonlocal silent_blocks, speech_blocks, in_utterance
             if self._stop.is_set():
                 return
             mono = indata[:, 0] if indata.ndim > 1 else indata.flatten()
             pcm = (mono * 32767).astype(np.int16)
             rms = float(np.sqrt(np.mean(mono.astype(np.float64) ** 2)))
-            if rms >= rms_threshold:
-                if not in_utterance and self._on_speech_start is not None:
-                    in_utterance = True
-                    try:
-                        self._on_speech_start()
-                    except Exception:
-                        logger.exception("on_speech_start failed")
-                buf.append(pcm.copy())
-                speech_blocks += 1
-                silent_blocks = 0
-                if max_seg > 0 and speech_blocks * block_sec >= max_seg:
-                    self._enqueue_flush(
-                        buf,
-                        speech_blocks * block_sec,
-                        sr,
-                        rolling=stt_rolling_enabled(),
-                    )
-                    buf.clear()
-                    silent_blocks = 0
-                    speech_blocks = 0
-            elif buf:
-                silent_blocks += 1
-                if silent_blocks * block_sec >= silence_limit:
-                    self._enqueue_flush(
-                        buf,
-                        speech_blocks * block_sec,
-                        sr,
-                        rolling=False,
-                    )
-                    buf.clear()
-                    silent_blocks = 0
-                    speech_blocks = 0
-                    in_utterance = False
+            with self._capture_lock:
+                if rms >= rms_threshold:
+                    if not self._in_utterance and self._on_speech_start is not None:
+                        self._in_utterance = True
+                        try:
+                            self._on_speech_start()
+                        except Exception:
+                            logger.exception("on_speech_start failed")
+                    self._buf.append(pcm.copy())
+                    self._speech_blocks += 1
+                    self._silent_blocks = 0
+                    if max_seg > 0 and self._speech_blocks * self._block_sec >= max_seg:
+                        self._flush_locked(
+                            sr,
+                            rolling=stt_rolling_enabled(),
+                        )
+                elif self._buf:
+                    self._silent_blocks += 1
+                    if self._silent_blocks * self._block_sec >= silence_limit:
+                        self._flush_locked(sr, rolling=False)
 
         try:
 
@@ -165,8 +170,9 @@ class AudioListener:
                     except Exception:
                         pass
                     self._stream = None
-            if buf:
-                self._enqueue_flush(buf, speech_blocks * block_sec, sr, rolling=False)
+            with self._capture_lock:
+                if self._buf:
+                    self._flush_locked(sr, rolling=False)
         except Exception as e:
             logger.exception("Audio listener failed")
             msg = str(e)
@@ -176,6 +182,15 @@ class AudioListener:
                     "Проверь AUDIO_INPUT_DEVICE в .env и docs/audio-setup.md (BlackHole)."
                 )
             raise RuntimeError(msg) from e
+
+    def _flush_locked(self, sr: int, *, rolling: bool) -> None:
+        speech_sec = self._speech_blocks * self._block_sec
+        chunks = list(self._buf)
+        self._buf.clear()
+        self._silent_blocks = 0
+        self._speech_blocks = 0
+        self._in_utterance = False
+        self._enqueue_flush(chunks, speech_sec, sr, rolling=rolling)
 
     def _enqueue_flush(
         self,
@@ -189,6 +204,11 @@ class AudioListener:
             return
         if not rolling:
             note_speech_end(self._speaker)
+            if self._on_utterance_end is not None:
+                try:
+                    self._on_utterance_end()
+                except Exception:
+                    logger.exception("on_utterance_end failed")
         pcm = np.concatenate(chunks)
         on_done = self._on_transcript
 

@@ -3,7 +3,7 @@ name: interview-copilot
 description: >-
   macOS Interview Copilot sidecar: STT transcript, rolling live text, auto-answer,
   screenshot vision. Use when developing or debugging copilot, sidecar, Whisper STT,
-  audio/BlackHole, menubar hotkeys, or answering from data/transcript.md.
+  audio/BlackHole, menubar hotkeys, or in-memory transcript (RAM).
 ---
 
 # Interview Copilot
@@ -12,7 +12,7 @@ description: >-
 
 ## Сессия интервью
 
-1. `copilot` → сброс `data/transcript.md`, hotkeys `⌘↩` / `⌘G` сразу.
+1. `copilot` → сброс диалога в RAM, hotkeys `⌘↩` / `⌘G` сразу.
 2. **CP → Начать прослушивание** — STT (BlackHole = `[Интервьюер]`, микрофон = `[Я]`).
 3. `⌘↩` — ответ на **последний** вопрос; `ANSWER_AUTO=1` — после финала в transcript (без ⌘↩). Мусор STT («Смешка», эхо prompt) не запускает ответ.
 4. `⌘G` — очистить реплики в сессии.
@@ -24,7 +24,7 @@ description: >-
 | Режим | Поведение |
 |-------|-----------|
 | **Rolling** (`STT_ROLLING=1`) | Каждые ~2 с речи → **«Интервьюер (live)»** в терминал (быстрый Whisper). |
-| **Финал** | Пауза ~0.45 с → одна строка в `data/transcript.md` + авто-ответ. |
+| **Финал** | Пауза ~0.4 с → реплика в RAM + авто-ответ; файл только при выходе/«Открыть транскрипт». |
 
 Переменные: `STT_LATENCY=fast`, `STT_FAST_FINAL=1`, `WHISPER_GLOSSARY_FIXES`, `AUDIO_PRESET=interview`, `ANSWER_BARGE_IN_ON_SPEECH=interviewer`, `COPILOT_TIMING=1`, `STT_LIVE_MIN_WORDS=2`. Анализ latency: `python scripts/analyze-session-timing.py`. Доки: `docs/voice-pipeline.md`, `docs/stt-glossary.md`.
 
@@ -38,7 +38,7 @@ description: >-
 
 - Резюме: `@context/resume.md` — только факты оттуда.
 - Формат: русский, EN-термины, **определение → пример → оговорки**, 5–10 предложений.
-- Не подменять вопрос шаблоном про стек; учитывать хвост `data/transcript.md`.
+- Не подменять вопрос шаблоном про стек; учитывать хвост диалога в RAM.
 - Скриншот: только решение задачи, без «Теории».
 
 ## Ключевые файлы
@@ -47,7 +47,7 @@ description: >-
 |---------|------|
 | Menubar / hotkeys | `sidecar/copilot/app.py` |
 | Сегментация аудио | `sidecar/copilot/listener.py` |
-| Rolling / live / merge | `stt_segment.py`, `stt_live.py`, `transcript.py` |
+| Rolling / live / merge | `stt_segment.py`, `stt_live.py`, `transcript.py` (RAM, `flush_transcript_to_disk`) |
 | Whisper / glossary | `stt.py`, `stt_prompt.py`, `stt_glossary.py`, `config.py` |
 | Endpointing | `endpointing.py` |
 | Тайминги / ходы ответа | `pipeline_timing.py`, `answer_turn.py` |

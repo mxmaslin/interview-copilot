@@ -295,6 +295,55 @@ def whisper_vad_filter() -> bool:
     return stt_latency_preset() == "quality"
 
 
+def whisper_hotwords() -> str:
+    """Короткий bias для live STT (faster-whisper hotwords), без длинного initial_prompt."""
+    return _env(
+        "WHISPER_HOTWORDS",
+        "Python, Kafka, Redis, PostgreSQL, backend, собеседование, микрофон",
+    ).strip()
+
+
+def whisper_compression_ratio_threshold() -> float | None:
+    """>2.4 — повторы/галлюцинации; ниже — строже (faster-whisper default 2.4)."""
+    explicit = _env("WHISPER_COMPRESSION_RATIO_THRESHOLD")
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    return 2.2 if stt_latency_preset() == "fast" else 2.4
+
+
+def whisper_log_prob_threshold() -> float | None:
+    explicit = _env("WHISPER_LOG_PROB_THRESHOLD")
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    return -1.0
+
+
+def whisper_no_speech_threshold() -> float | None:
+    explicit = _env("WHISPER_NO_SPEECH_THRESHOLD")
+    if explicit:
+        try:
+            return float(explicit)
+        except ValueError:
+            pass
+    return 0.6
+
+
+def whisper_repetition_penalty() -> float:
+    explicit = _env("WHISPER_REPETITION_PENALTY")
+    if explicit:
+        try:
+            return max(1.0, float(explicit))
+        except ValueError:
+            pass
+    return 1.05 if stt_latency_preset() == "fast" else 1.0
+
+
 def sample_rate() -> int:
     try:
         return int(_env("AUDIO_SAMPLE_RATE", "16000"))
@@ -316,7 +365,7 @@ def stt_pending_flush_sec() -> float:
         except ValueError:
             pass
     if stt_latency_preset() == "fast":
-        return 0.8
+        return 0.45
     return 1.2
 
 
@@ -359,7 +408,7 @@ def silence_seconds(*, speaker: str = "interviewer") -> float:
             return 0.58
         if preset == "interview":
             if stt_latency_preset() == "fast":
-                return 0.48
+                return 0.40
             return 0.58
         preset_latency = stt_latency_preset()
         if preset_latency == "quality":
@@ -380,7 +429,7 @@ def silence_seconds(*, speaker: str = "interviewer") -> float:
         return 0.42
     if preset == "interview":
         if stt_latency_preset() == "fast":
-            return 0.30
+            return 0.26
         return 0.38
     latency = stt_latency_preset()
     if latency == "quality":
@@ -398,10 +447,15 @@ def min_speech_seconds() -> float:
 
 
 def audio_block_ms() -> int:
-    try:
-        return max(20, int(_env("AUDIO_BLOCK_MS", "50")))
-    except ValueError:
-        return 50
+    explicit = _env("AUDIO_BLOCK_MS")
+    if explicit:
+        try:
+            return max(20, int(explicit))
+        except ValueError:
+            pass
+    if stt_latency_preset() == "fast":
+        return 30
+    return 50
 
 
 def max_segment_seconds(*, speaker: str = "interviewer") -> float:
@@ -439,7 +493,7 @@ def max_segment_seconds(*, speaker: str = "interviewer") -> float:
         if preset == "balanced":
             return 2.0
         if stt_latency_preset() == "fast":
-            return 1.5
+            return 1.2
         return 1.8
     if preset == "balanced":
         return 5.0
@@ -498,10 +552,13 @@ def copilot_llm_slow_ms() -> int:
 
 def stt_live_min_words() -> int:
     """Не печатать live в терминал, пока в rolling < N слов (0 = без порога)."""
-    try:
-        return max(0, int(_env("STT_LIVE_MIN_WORDS", "2")))
-    except ValueError:
-        return 2
+    explicit = _env("STT_LIVE_MIN_WORDS")
+    if explicit:
+        try:
+            return max(0, int(explicit))
+        except ValueError:
+            pass
+    return 1 if stt_latency_preset() == "fast" else 2
 
 
 def answer_provider() -> str:

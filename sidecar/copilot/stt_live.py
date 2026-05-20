@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from difflib import SequenceMatcher
 
 from .stt_filter import is_stt_hallucination, strip_laughter_artifacts
 from .stt_glossary import apply_glossary_fixes
@@ -30,8 +31,55 @@ _STRIP_FROM_LIVE: tuple[re.Pattern[str], ...] = tuple(
         r"Библиотеки,?\s+протоколы[^\n.?]{0,200}",
         r"техническ\w*[^.?!]{0,120}интервью[^.?!]{0,120}русск\w*\s+реч[^.?!]{0,200}",
         r"\bсмеш\w*\.?\b",
+        r"\bдюм\w*!?\b",
     )
 )
+
+
+def dedupe_repeated_live(text: str) -> str:
+    """«Привет как дела? Привет как дела» → одна фраза."""
+    t = (text or "").strip()
+    if len(t) < 12:
+        return t
+    words = t.split()
+    n = len(words)
+    if n >= 6 and n % 2 == 0:
+        half = n // 2
+        a = " ".join(words[:half])
+        b = " ".join(words[half:])
+        if SequenceMatcher(None, a.lower(), b.lower()).ratio() >= 0.88:
+            return a
+    if "?" in t and t.count("?") >= 2:
+        parts = [p.strip() for p in re.split(r"\?+", t) if p.strip()]
+        if len(parts) >= 2:
+            a, b = parts[-2], parts[-1]
+            if SequenceMatcher(None, a.lower(), b.lower()).ratio() >= 0.88:
+                return f"{b}?"
+    return t
+
+
+def focus_live_question(text: str) -> str:
+    """Из склеенного rolling взять последний осмысленный вопрос (⌘↩ / live)."""
+    t = (text or "").strip()
+    if not t:
+        return t
+    had_q = t.endswith("?")
+    base = t[:-1].strip() if had_q else t
+
+    clauses = re.split(r"(?<=[а-яё,])\s+(?=[А-ЯЁA-Z])", base)
+    if len(clauses) >= 2:
+        tail = clauses[-1].strip()
+        head = " ".join(clauses[:-1]).strip()
+        if head and len(head.split()) >= 4 and len(tail.split()) >= 2:
+            return f"{tail}?" if had_q else tail
+
+    if t.count("?") >= 2:
+        end = t.rfind("?")
+        start = t.rfind("?", 0, end)
+        chunk = t[(start + 1 if start >= 0 else 0) : end + 1].strip()
+        if len(chunk.split()) >= 2:
+            return chunk
+    return t
 
 
 def is_stt_noise_chunk(text: str) -> bool:
@@ -54,7 +102,9 @@ def sanitize_live_transcript(text: str) -> str:
         return ""
     for pat in _STRIP_FROM_LIVE:
         cleaned = pat.sub(" ", cleaned)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.?…")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.…")
+    cleaned = dedupe_repeated_live(cleaned)
+    cleaned = focus_live_question(cleaned)
     cleaned = apply_glossary_fixes(cleaned)
     if is_stt_hallucination(cleaned):
         return ""
@@ -82,7 +132,7 @@ def live_question_supersedes_file(file_question: str | None, live: str) -> bool:
         return True
     if live_words >= 2 and SequenceMatcher(None, f.lower(), live.lower()).ratio() < 0.52:
         return True
-    if f not in live and live_words >= 3:
+    if f not in live and live_words >= 2:
         return True
     return False
 

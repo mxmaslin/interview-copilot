@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
-from datetime import datetime, timezone
+from pathlib import Path
 
 from .config import DATA_DIR, TRANSCRIPT_PATH
 
@@ -23,6 +23,8 @@ _on_self_line_committed: Callable[[], None] | None = None
 _pending_flush_timer: threading.Timer | None = None
 _answer_speaker_pin: str | None = None
 _answer_target_pin: tuple[str, str] | None = None
+# Диалог только в RAM — без read/write на каждую реплику (hot path STT / ⌘↩).
+_dialogue_lines: list[str] = []
 
 
 def ensure_data_dir() -> None:
@@ -59,11 +61,11 @@ def _cancel_pending_flush_timer() -> None:
 
 def _schedule_pending_flush_timer() -> None:
     from .config import stt_pending_flush_sec
-    from .main_thread import run_on_main
 
     sec = stt_pending_flush_sec()
     if sec <= 0:
         return
+    from .main_thread import run_on_main
 
     def fire() -> None:
         run_on_main(_flush_pending_to_ui, None)
@@ -117,20 +119,34 @@ def flush_pending_self_line() -> str | None:
 
 
 def _write_dialogue_line(speaker: str, text: str) -> str:
-    ensure_data_dir()
     label = "[Я]" if speaker == "self" else "[Интервьюер]"
     line = f"{label}: {text.strip()}"
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    block = f"\n<!-- {ts} -->\n{line}\n"
-    if not TRANSCRIPT_PATH.exists():
-        TRANSCRIPT_PATH.write_text("# Interview transcript\n", encoding="utf-8")
-    with TRANSCRIPT_PATH.open("a", encoding="utf-8") as f:
-        f.write(block)
+    with _lock:
+        _dialogue_lines.append(line)
     return line
+
+
+def export_transcript_markdown() -> str:
+    """Снимок диалога для архива сессии или «Открыть транскрипт»."""
+    with _lock:
+        if not _dialogue_lines:
+            return "# Interview transcript\n\n"
+        body = "\n".join(_dialogue_lines)
+    return f"# Interview transcript\n\n{body}\n"
+
+
+def flush_transcript_to_disk(path: Path | None = None) -> Path:
+    """Записать RAM → файл по запросу (не на hot path STT)."""
+    target = path or TRANSCRIPT_PATH
+    ensure_data_dir()
+    target.write_text(export_transcript_markdown(), encoding="utf-8")
+    return target
 
 
 def merge_rolling_transcript(partials: list[str], final: str) -> str:
     """Склеить rolling-куски и финальный сегмент Whisper в одну реплику."""
+    from difflib import SequenceMatcher
+
     chunks = [p.strip() for p in partials if (p or "").strip()]
     fin = (final or "").strip()
     if not chunks:
@@ -143,6 +159,8 @@ def merge_rolling_transcript(partials: list[str], final: str) -> str:
         return fin
     if low_m.endswith(low_f) or low_f in low_m:
         return merged
+    if SequenceMatcher(None, low_m, low_f).ratio() < 0.48:
+        return fin
     return f"{merged} {fin}".strip()
 
 
@@ -218,29 +236,19 @@ def _self_text(line: str) -> str:
 
 
 def clear_dialogue() -> None:
-    """Удалить все реплики [Интервьюер] и [Я] из transcript.md."""
-    global _pending_self_utterance
+    """Очистить диалог в RAM (⌘G / старт copilot). Файл data/transcript.md не трогаем."""
+    global _pending_self_utterance, _dialogue_lines, _answer_speaker_pin, _answer_target_pin
+    _cancel_pending_flush_timer()
     with _lock:
         _pending_self_utterance = None
-        ensure_data_dir()
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        TRANSCRIPT_PATH.write_text(
-            "# Interview transcript\n\n" f"<!-- cleared {ts} -->\n",
-            encoding="utf-8",
-        )
+        _dialogue_lines.clear()
+        _answer_speaker_pin = None
+        _answer_target_pin = None
 
 
 def dialogue_lines() -> list[str]:
     with _lock:
-        if not TRANSCRIPT_PATH.exists():
-            return []
-        lines = TRANSCRIPT_PATH.read_text(encoding="utf-8").splitlines()
-    out: list[str] = []
-    for ln in lines:
-        s = ln.strip()
-        if s.startswith("[Интервьюер]:") or s.startswith("[Я]:"):
-            out.append(s)
-    return out
+        return list(_dialogue_lines)
 
 
 def has_interviewer_lines() -> bool:
