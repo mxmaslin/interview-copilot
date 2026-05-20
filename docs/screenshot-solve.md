@@ -26,6 +26,18 @@ SCREENSHOT_WARM_AGENT=0
 
 Ключ: [console.anthropic.com](https://console.anthropic.com/). Зависимость: `pip install -e 'sidecar/[llm]'` (пакет `anthropic`).
 
+### OpenAI vision
+
+Ключ: [platform.openai.com/api-keys](https://platform.openai.com/api-keys). Модели: `gpt-4o-mini` (дешевле), `gpt-4o` (точнее на коде/схемах).
+
+### Cursor API
+
+Ключ: [cursor.com/dashboard/integrations](https://cursor.com/dashboard/integrations). Уже в проекте; `SCREENSHOT_ANSWER_PROVIDER=cursor`, `CURSOR_MODEL=auto`.
+
+### Прокси (если OpenAI недоступен напрямую)
+
+[ProxyAPI](https://proxyapi.ru/) и аналоги — `SCREENSHOT_OPENAI_BASE_URL` + `OPENAI_API_KEY` от прокси.
+
 ## Модель Cursor
 
 ```env

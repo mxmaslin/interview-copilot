@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .answer_delivery import write_last_answer, write_last_screenshot_answer
+from .session_archive import record_screenshot_turn
 from .answer_provider import AnswerProviderError, _openai_client
 from .clipboard_image import (
     clear_clipboard,
@@ -324,6 +325,8 @@ def solve_screenshot_png(
         )
 
     shot_path = write_last_screenshot_answer(text, provider=provider, model=model)
+    if text:
+        record_screenshot_turn(text, provider=provider, model=model)
     answer_path = shot_path
     if screenshot_solve_also_last_answer():
         answer_path = write_last_answer(

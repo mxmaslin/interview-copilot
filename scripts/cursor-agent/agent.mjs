@@ -30,6 +30,7 @@ const TRANSCRIPT_RULES_PATH = join(
   REPO_ROOT,
   "sidecar/copilot/transcript_rules.json",
 );
+const RESUME_PATH = join(REPO_ROOT, "context/resume.md");
 
 /** @type {Record<string, unknown> | null} */
 let _transcriptRules = null;
@@ -100,9 +101,9 @@ if (CLI_CMD === "answer-warm" || CLI_CMD === "screenshot-warm") {
 const STATE_FILE = join(STATE_DIR, "agent-state.json");
 const SCREENSHOT_STATE_FILE = join(STATE_DIR, "screenshot-agent-state.json");
 
-const INTERVIEW_SYSTEM = `Ты — ассистент на техническом интервью (Python backend).
-Отвечай кратко на русском, EN-термины где уместно.
-Структура: определение → пример → оговорки. 5–8 предложений, для озвучивания вслух.`;
+const ANSWER_SYSTEM = `Ты помогаешь кандидату на собеседовании (любой этап: HR, менеджер, техлид, coding).
+Отвечай СТРОГО на последний заданный вопрос — не подменяй тему и не уходи в смежные лекции.
+Опирайся на контекст диалога, если он дан. Про опыт — только факты из «Резюме». 5–10 предложений, RU, EN-термины, для озвучивания вслух.`;
 
 const SCREENSHOT_SYSTEM = `Ты решаешь задачу с изображения (скриншот экрана).
 Ответ на русском, EN-термины где уместно.
@@ -534,33 +535,37 @@ function compactDialogueContext(transcript, maxChars) {
   return picked.join("\n");
 }
 
+function loadResumeExcerpt(maxChars = 6000) {
+  if (!existsSync(RESUME_PATH)) return "";
+  const raw = readFileSync(RESUME_PATH, "utf8").trim();
+  if (!raw) return "";
+  if (raw.length <= maxChars) return raw;
+  return `${raw.slice(0, maxChars - 20).trim()}\n\n[…обрезано]`;
+}
+
+function buildAnswerSystemPrompt() {
+  let base = ANSWER_SYSTEM;
+  const resume = loadResumeExcerpt();
+  if (resume) base += `\n\n## Резюме (только эти факты)\n\n${resume}`;
+  return base;
+}
+
 function buildAnswerPrompt(transcript, question, speaker) {
   const qLabel =
     speaker === "self"
-      ? "Мой вопрос (соло или микрофон на созвоне выключен)"
+      ? "Мой вопрос (соло, звук интервьюера отключён или микрофон на созвоне выключен)"
       : "Вопрос интервьюера";
   const minimal = envBool("CURSOR_ANSWER_MINIMAL");
-  if (minimal) {
-    return `${INTERVIEW_SYSTEM}
+  const maxChars = envInt("CURSOR_ANSWER_CONTEXT_CHARS", 800);
+  const context = minimal ? "" : compactDialogueContext(transcript, maxChars);
+  const system = buildAnswerSystemPrompt();
+  const ctxBlock = context ? `\n\nКраткий контекст диалога:\n${context}` : "";
+  return `${system}
 
 ${qLabel}:
 ${question}
 
-Ответь кратко для озвучивания вслух.`;
-  }
-
-  const maxChars = envInt("CURSOR_ANSWER_CONTEXT_CHARS", 800);
-  const context = compactDialogueContext(transcript, maxChars);
-  const ctxBlock = context
-    ? `\n\nКраткий контекст диалога:\n${context}`
-    : "";
-
-  return `${INTERVIEW_SYSTEM}
-
-Ответь на последний вопрос (кратко, для озвучивания вслух).
-
-${qLabel}:
-${question}${ctxBlock}`;
+Дай ответ для озвучивания вслух. Только по этому вопросу, с учётом контекста.${ctxBlock}`;
 }
 
 function isAgentNotFound(err) {

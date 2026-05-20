@@ -58,7 +58,7 @@ def test_chat_complete_stream(monkeypatch) -> None:
     mock_openai = MagicMock()
     mock_openai.return_value = mock_client
     monkeypatch.setitem(__import__("sys").modules, "openai", MagicMock(OpenAI=mock_openai))
-    monkeypatch.setattr(ap, "_build_user_message", lambda: "user msg")
+    monkeypatch.setattr(ap, "_build_messages", lambda: ("system", "user msg"))
 
     seen: list[str] = []
 

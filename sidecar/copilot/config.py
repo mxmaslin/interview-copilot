@@ -165,10 +165,10 @@ def whisper_local_size() -> str:
         return explicit
     preset = stt_latency_preset()
     if preset == "quality":
-        return "small"
+        return "large-v3"
     if preset == "balanced":
-        return "small"
-    return "small"  # fast: small — лучше RU, чем tiny/base; ~1–2 с медленнее base
+        return "medium"
+    return "medium"  # fast: medium — лучше RU/HR речь на Apple Silicon
 
 
 def whisper_compute_type() -> str:
@@ -204,7 +204,7 @@ def whisper_beam_size() -> int:
 
 def whisper_prompt_mode() -> str:
     """general — бытовая речь; interview — IT-термины в prompt (собес)."""
-    return _env("WHISPER_PROMPT_MODE", "interview").lower()
+    return _env("WHISPER_PROMPT_MODE", "general").lower()
 
 
 def whisper_initial_prompt() -> str:

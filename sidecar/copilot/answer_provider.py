@@ -32,17 +32,13 @@ from .cursor_bridge import (
 
 _openai_clients: dict[tuple[str, str], object] = {}
 from .cursor_ide_chat import BIND_HELP, chat_is_bound
+from .interview_prompt import build_system_prompt, build_user_message as build_answer_user_message
+from .session_archive import record_answer_turn
 from .transcript import (
     answer_self_questions_active,
     compact_dialogue_context,
     last_answer_line,
     last_answer_target,
-)
-
-INTERVIEW_SYSTEM = (
-    "Ты — ассистент на техническом интервью (Python backend). "
-    "Отвечай кратко на русском, EN-термины где уместно. "
-    "Структура: определение → пример → оговорки. 5–8 предложений, для озвучивания вслух."
 )
 
 
@@ -74,23 +70,20 @@ def _no_question_error() -> str:
     return "Нет реплики [Интервьюер] в транскрипте."
 
 
-def _build_user_message() -> str:
+def _build_messages() -> tuple[str, str]:
+    """(system, user)."""
     target = last_answer_target()
     if not target:
         raise AnswerProviderError(_no_question_error())
     question, speaker = target
-    if speaker == "self":
-        user = (
-            "Мой вопрос (соло на созвоне или микрофон на созвоне выключен):\n"
-            f"{question.strip()}"
-        )
-    else:
-        user = f"Вопрос интервьюера:\n{question.strip()}"
+    context = ""
     if not answer_minimal_context():
         context = compact_dialogue_context(answer_context_chars())
-        if context:
-            user += f"\n\nКраткий контекст диалога:\n{context}"
-    return user
+    user = build_answer_user_message(
+        question, speaker=speaker, dialogue_context=context
+    )
+    system = build_system_prompt()
+    return system, user
 
 
 def _finalize_answer(
@@ -108,6 +101,13 @@ def _finalize_answer(
 
     path = write_last_answer(question, answer, provider=provider, model=model)
     meta["answer_path"] = str(path)
+    if question and answer:
+        record_answer_turn(
+            question,
+            answer,
+            provider=provider,
+            model=model,
+        )
     log("[copilot] также:", path)
 
     if cursor_agent_mirror():
@@ -142,7 +142,12 @@ def _publish_answer(
     model: str = "",
 ) -> dict[str, Any]:
     print_interview_answer(question, answer, provider=provider, model=model)
-    meta = _finalize_answer(question, answer, provider=provider, model=model)
+    meta = _finalize_answer(
+        question,
+        answer,
+        provider=provider,
+        model=model,
+    )
     meta["terminal"] = True
     return meta
 
@@ -191,12 +196,13 @@ def _chat_complete(
     model: str,
     base_url: str | None = None,
 ) -> dict[str, Any]:
+    system, user = _build_messages()
     client = _openai_client(api_key=api_key, base_url=base_url)
     resp = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": INTERVIEW_SYSTEM},
-            {"role": "user", "content": _build_user_message()},
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
         ],
         max_tokens=answer_max_tokens(),
         temperature=0.25,
@@ -213,12 +219,13 @@ def _chat_complete_stream(
     base_url: str | None,
     on_delta: Callable[[str], None],
 ) -> str:
+    system, user = _build_messages()
     client = _openai_client(api_key=api_key, base_url=base_url)
     stream = client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": INTERVIEW_SYSTEM},
-            {"role": "user", "content": _build_user_message()},
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
         ],
         max_tokens=answer_max_tokens(),
         temperature=0.25,
@@ -264,7 +271,9 @@ def answer_via_openai() -> dict[str, Any]:
         }
 
     result = _chat_complete(provider="openai", api_key=key, model=model)
-    result.update(_publish_answer(question, result["text"], provider="openai", model=model))
+    result.update(
+        _publish_answer(question, result["text"], provider="openai", model=model)
+    )
     return result
 
 

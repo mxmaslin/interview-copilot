@@ -17,6 +17,7 @@ data/transcript.md
 data/last-answer.md
 data/last-screenshot-answer.md
 data/answers.log
+data/sessions/
 .vscode/zsh/.zsh_history
 .vscode/zsh/.zcompdump*
 context/resume.md

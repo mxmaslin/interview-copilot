@@ -45,6 +45,16 @@ copilot   # Terminal.app / iTerm, не терминал Cursor
 
 Подробнее: [audio-setup.md](audio-setup.md), [telegram-input.md](telegram-input.md).
 
+## Архив сессий
+
+После **CP → Выход** (или нового `copilot`) сессия сохраняется в `data/sessions/<дата-время>/`:
+
+- `transcript.md` — полный диалог
+- `review.md` — вопросы и ответы Copilot по ходам
+- `meta.json` — время начала/конца
+
+Папка в `.gitignore` — для разбора, насколько ответы попадали в вопрос.
+
 ## Полезные `.env`
 
 ```env

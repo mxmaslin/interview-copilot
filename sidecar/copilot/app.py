@@ -60,6 +60,7 @@ from .telegram_input import TelegramInputError, TelegramInterviewerInput
 from .main_thread import run_on_main
 from .notify import notify
 from .runtime_macos import ensure_info_plist
+from .session_archive import end_session, start_session
 from .transcript import (
     answer_self_questions_active,
     append_line,
@@ -168,6 +169,7 @@ class CopilotApp(rumps.App):
 
     def _begin_interview(self, *, silent: bool = False) -> None:
         clear_dialogue()
+        start_session()
         self.session_active = True
         set_interview_active(True)
         self._set_status("интервью")
@@ -193,6 +195,9 @@ class CopilotApp(rumps.App):
         set_interview_active(False)
         self._stop_all_audio()
         self._stop_hotkey()
+        archived = end_session()
+        if archived:
+            log("[copilot] сессия сохранена:", archived)
 
     def on_bind_chat(self, _: object) -> None:
         w = rumps.Window(
