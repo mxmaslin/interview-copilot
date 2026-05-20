@@ -63,6 +63,8 @@
 | `WHISPER_BEAM_SIZE` | Точность финального сегмента; live всегда beam=1 |
 | `WHISPER_GLOSSARY_FIXES=1` | RU→EN: GIL, Redis, Kafka (кавка→Kafka) — `stt_glossary.py` |
 | `COPILOT_TIMING=1` | `stt` / `llm_ttft` / `total` в терминал и в архив сессии |
+| `COPILOT_TIMING_HINTS=1` | Подсказки по тюнингу после timing; `scripts/analyze-session-timing.py` |
+| `STT_LIVE_MIN_WORDS=2` | Не печатать live, пока в rolling < N слов |
 | `AUDIO_PRESET` | `call` \| `solo` \| `fast` — паузы VAD |
 | `STT_FINAL_DEBOUNCE_SEC` | Не дублировать одинаковый финал |
 | `STT_MIN_WORDS_FINAL_SELF` | Мин. слов (или `?`) для финала `[Я]` |

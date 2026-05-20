@@ -26,7 +26,7 @@ Copilot — **voice-augmented sidecar**: STT → LLM → текст. План п
 | **2** | ✓ | `voice-pipeline.md`, fixtures, pytest |
 | **3** | ✓ | `endpointing.py`, debounce, semantic-lite, `AUDIO_PRESET` |
 | **4** | ✓ | `answer_turn`, `pin_answer_target`, rolling ⌘↩ |
-| **5** | Далее | Latency по метрикам (`llm_ttft` vs `stt`) |
+| **5** | ✓ | `COPILOT_TIMING_HINTS`, `scripts/analyze-session-timing.py`, `STT_LIVE_MIN_WORDS` |
 | **6** | ✓ | README, AGENTS, skill, rules, audio-setup, copilot-workflow |
 
 ### Фаза 0 — верификация
@@ -44,13 +44,31 @@ Copilot — **voice-augmented sidecar**: STT → LLM → текст. План п
 - `STT_MIN_WORDS_FINAL_SELF` (по умолчанию 3 слова или `?`)
 - `AUDIO_PRESET=call` — длиннее пауза на Brio, короче риск обрубка
 
-### Фаза 5 — когда смотреть timing
+### Фаза 5 — latency по метрикам (реализовано)
+
+После ответа при `COPILOT_TIMING=1` и `COPILOT_TIMING_HINTS=1` (по умолчанию вместе с timing):
+
+```text
+[copilot] timing: stt=420ms llm_ttft=890ms total=1.3s (deepseek, hotkey, self)
+[copilot] hint: LLM TTFT 2100ms ≥ 1500ms: deepseek-chat, ANSWER_MINIMAL_CONTEXT=1, ...
+```
+
+Сводка по сессиям:
+
+```bash
+python scripts/analyze-session-timing.py
+python scripts/analyze-session-timing.py 2026-05-20_18-22-52
+```
+
+Пороги: `COPILOT_STT_SLOW_MS=800`, `COPILOT_LLM_SLOW_MS=1500`.
+
+**Live UX:** `STT_LIVE_MIN_WORDS=2` — не печатать rolling, пока < 2 слов (меньше мусора в терминале).
 
 | Симптом | Действие |
 |---------|----------|
-| Большой `llm_ttft` | модель / `ANSWER_PROVIDER` / таймаут |
-| Большой `stt` | `AUDIO_PRESET`, `AUDIO_SILENCE_SEC_*`, Whisper |
-| Нет `stt` при ⌘↩ на live | норма; смотри финал после паузы |
+| Большой `llm_ttft` | модель / `ANSWER_MINIMAL_CONTEXT` / `ANSWER_MAX_TOKENS` |
+| Большой `stt` | `AUDIO_PRESET`, `AUDIO_SILENCE_SEC_*`, `STT_LATENCY=fast` |
+| Нет `stt` при ⌘↩ на live | норма; hint в терминале |
 
 ## Что не делаем
 

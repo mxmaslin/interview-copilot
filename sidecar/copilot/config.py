@@ -425,6 +425,35 @@ def copilot_timing_jsonl_enabled() -> bool:
     return _env("COPILOT_TIMING_JSONL", "0").lower() in ("1", "true", "yes", "on")
 
 
+def copilot_timing_hints_enabled() -> bool:
+    """Подсказки по тюнингу после timing (фаза 5)."""
+    if not copilot_timing_enabled():
+        return False
+    return _env("COPILOT_TIMING_HINTS", "1").lower() not in ("0", "false", "no")
+
+
+def copilot_stt_slow_ms() -> int:
+    try:
+        return max(200, int(_env("COPILOT_STT_SLOW_MS", "800")))
+    except ValueError:
+        return 800
+
+
+def copilot_llm_slow_ms() -> int:
+    try:
+        return max(300, int(_env("COPILOT_LLM_SLOW_MS", "1500")))
+    except ValueError:
+        return 1500
+
+
+def stt_live_min_words() -> int:
+    """Не печатать live в терминал, пока в rolling < N слов (0 = без порога)."""
+    try:
+        return max(0, int(_env("STT_LIVE_MIN_WORDS", "2")))
+    except ValueError:
+        return 2
+
+
 def answer_provider() -> str:
     """cursor | openai | deepseek."""
     return _env("ANSWER_PROVIDER", "cursor").lower()

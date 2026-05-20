@@ -26,7 +26,7 @@ description: >-
 | **Rolling** (`STT_ROLLING=1`) | Каждые ~2 с речи → **«Интервьюер (live)»** в терминал (быстрый Whisper). |
 | **Финал** | Пауза ~0.45 с → одна строка в `data/transcript.md` + авто-ответ. |
 
-Переменные: `STT_LATENCY`, `AUDIO_ROLLING_SEC`, `WHISPER_PROMPT_MODE=tech`, `WHISPER_GLOSSARY_FIXES` (словарь RU→EN: `stt_glossary_terms.py`, см. `docs/stt-glossary.md`), `AUDIO_PRESET=call`, `COPILOT_TIMING=1`. Доки: `docs/voice-pipeline.md`, `docs/audio-setup.md`.
+Переменные: `STT_LATENCY`, `WHISPER_GLOSSARY_FIXES`, `AUDIO_PRESET=call`, `COPILOT_TIMING=1`, `COPILOT_TIMING_HINTS=1`, `STT_LIVE_MIN_WORDS=2`. Анализ latency: `python scripts/analyze-session-timing.py`. Доки: `docs/voice-pipeline.md`, `docs/stt-glossary.md`.
 
 Не хардкодить отдельные бренды в бизнес-логику — только `stt_glossary.py` / prompt / фильтры (`stt_filter`, `stt_live`).
 

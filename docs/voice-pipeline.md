@@ -90,4 +90,20 @@ COPILOT_TIMING=1
 
 `WHISPER_GLOSSARY_FIXES=1` — пост-правка в `stt_glossary.py` на финале transcript, commit и в live (`stt_live.sanitize_live_transcript`). Примеры: `кавка`→Kafka, `редис`→Redis, `гил`→GIL. Не дублировать списом в `WHISPER_PROMPT`.
 
-Дальше: [voice-pipeline-roadmap.md](voice-pipeline-roadmap.md) фаза 5 (latency по метрикам).
+## Фаза 5 — тюнинг latency
+
+```bash
+COPILOT_TIMING=1
+COPILOT_TIMING_HINTS=1      # подсказки в терминал после ответа
+COPILOT_STT_SLOW_MS=800
+COPILOT_LLM_SLOW_MS=1500
+STT_LIVE_MIN_WORDS=2        # не спамить live односложными кусками
+```
+
+Анализ архива:
+
+```bash
+python scripts/analyze-session-timing.py
+```
+
+См. [voice-pipeline-roadmap.md](voice-pipeline-roadmap.md) — фаза 0 (ручная верификация на живом `copilot`).

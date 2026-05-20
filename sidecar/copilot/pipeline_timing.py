@@ -9,7 +9,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from .config import DATA_DIR, copilot_timing_enabled, copilot_timing_jsonl_enabled
+from .config import (
+    DATA_DIR,
+    copilot_timing_enabled,
+    copilot_timing_hints_enabled,
+    copilot_timing_jsonl_enabled,
+)
+from .timing_hints import suggest_tuning_hints
 
 _lock = threading.Lock()
 _active: TurnMarks | None = None
@@ -116,12 +122,19 @@ def finish_answer() -> None:
         _active = None
 
     marks.answer_done = _mono()
+    record = marks_to_record(marks)
     line = format_summary(marks)
     if line:
         sys.stdout.write(line + "\n")
         sys.stdout.flush()
+    if copilot_timing_hints_enabled():
+        hints = suggest_tuning_hints(record)
+        if hints:
+            for hint in hints:
+                sys.stdout.write(f"[copilot] hint: {hint}\n")
+            sys.stdout.flush()
     if copilot_timing_jsonl_enabled():
-        _append_jsonl(marks_to_record(marks))
+        _append_jsonl(record)
 
 
 def format_summary(marks: TurnMarks) -> str:

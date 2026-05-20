@@ -19,6 +19,7 @@ from .config import (
     answer_auto_enabled,
     answer_pause_audio,
     answer_provider,
+    stt_live_min_words,
     audio_device_hint_interviewer,
     audio_device_hint_self,
     audio_listen_interviewer,
@@ -295,8 +296,14 @@ class CopilotApp(rumps.App):
                 if not chunk or is_stt_noise_chunk(chunk):
                     return
                 self._rolling_interviewer.append(text)
-                if interview_active() and terminal_show_interviewer_stt():
-                    print_interviewer_transcript_live(text, final=False)
+                if (
+                    interview_active()
+                    and terminal_show_interviewer_stt()
+                    and self._live_ready_for_display("interviewer")
+                ):
+                    print_interviewer_transcript_live(
+                        self._merged_rolling("interviewer"), final=False
+                    )
                 return
             merged = merge_rolling_transcript(self._rolling_interviewer, text)
             self._rolling_interviewer.clear()
@@ -315,8 +322,14 @@ class CopilotApp(rumps.App):
                 if not chunk or is_stt_noise_chunk(chunk):
                     return
                 self._rolling_self.append(text)
-                if interview_active() and terminal_show_self_stt():
-                    print_self_transcript_live(text, final=False)
+                if (
+                    interview_active()
+                    and terminal_show_self_stt()
+                    and self._live_ready_for_display("self")
+                ):
+                    print_self_transcript_live(
+                        self._merged_rolling("self"), final=False
+                    )
                 return
             merged = merge_rolling_transcript(self._rolling_self, text)
             self._rolling_self.clear()
@@ -339,6 +352,16 @@ class CopilotApp(rumps.App):
         return sanitize_live_transcript(
             merge_rolling_transcript(list(buf), "").strip()
         )
+
+    def _live_ready_for_display(self, speaker: str) -> bool:
+        """Не спамить терминал односложным live (voice-agent partial UX)."""
+        min_words = stt_live_min_words()
+        if min_words <= 0:
+            return True
+        merged = self._merged_rolling(speaker)
+        if not merged:
+            return False
+        return len(merged.split()) >= min_words
 
     def _resolve_hotkey_answer_target(self) -> tuple[str, str] | None:
         """⌘↩: приоритет live rolling над устаревшей строкой в transcript.md."""
