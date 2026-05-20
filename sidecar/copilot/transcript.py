@@ -19,6 +19,7 @@ from .transcript_rules import (
 _lock = threading.RLock()
 _call_mic_muted_runtime = False
 _pending_self_utterance: str | None = None
+_on_self_line_committed: Callable[[], None] | None = None
 _pending_flush_timer: threading.Timer | None = None
 _answer_speaker_pin: str | None = None
 _answer_target_pin: tuple[str, str] | None = None
@@ -31,6 +32,21 @@ def ensure_data_dir() -> None:
 def pending_self_utterance() -> str | None:
     with _lock:
         return _pending_self_utterance
+
+
+def set_on_self_line_committed(callback: Callable[[], None] | None) -> None:
+    """Вызывается после записи [Я] в transcript (финал или pending flush) — для ANSWER_AUTO."""
+    global _on_self_line_committed
+    _on_self_line_committed = callback
+
+
+def _notify_self_line_committed() -> None:
+    cb = _on_self_line_committed
+    if cb is not None:
+        try:
+            cb()
+        except Exception:
+            pass
 
 
 def _cancel_pending_flush_timer() -> None:
@@ -77,10 +93,15 @@ def _flush_pending_to_ui() -> None:
 
     if threading.current_thread() is threading.main_thread():
         show()
+        _notify_self_line_committed()
     else:
         from .main_thread import run_on_main
 
-        run_on_main(show, None)
+        def show_and_notify() -> None:
+            show()
+            _notify_self_line_committed()
+
+        run_on_main(show_and_notify, None)
 
 
 def flush_pending_self_line() -> str | None:

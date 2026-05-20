@@ -27,15 +27,35 @@ def is_prompt_echo_hallucination(text: str) -> bool:
     return bool(_PROMPT_ECHO_RE.search(t))
 
 
+_TECH_PROMPT_ECHO_RE = re.compile(
+    r"техническ\w*[^.?!]{0,80}интервью[^.?!]{0,80}русск\w*\s+реч"
+    r"|техническ\w*[^.?!]{0,40}библиотек"
+    r"|библиотек\w*[^.?!]{0,40}протокол",
+    re.IGNORECASE,
+)
+
+
 def is_whisper_tech_prompt_echo(text: str) -> bool:
     """Эхо initial_prompt (режим tech/general) на тишине — Whisper повторяет подсказку."""
     t = re.sub(r"\s+", " ", (text or "").strip())
     if len(t) < 10:
         return False
     low = t.lower()
+    if _TECH_PROMPT_ECHO_RE.search(low):
+        return True
     if low.count("русская речь") >= 2:
         return True
     if low.count("техническ") >= 3 and "интервью" in low:
+        return True
+    markers = (
+        "техническ" in low,
+        "интервью" in low,
+        "русск" in low,
+        "библиотек" in low,
+        "протокол" in low,
+        "латиниц" in low,
+    )
+    if sum(markers) >= 3 and len(t) < 220:
         return True
     if re.search(r"техническ\w*", low) and "интервью" in low and re.search(r"русск", low):
         if len(t) < 160:
@@ -45,10 +65,16 @@ def is_whisper_tech_prompt_echo(text: str) -> bool:
                 r"интервью,?\s*",
                 r"русская\s+речь\.?\s*",
                 r"технические\s+интервью,?\s*",
+                r"библиотек\w*,?\s*",
+                r"протокол\w*,?\s*",
+                r"бд,?\s*",
+                r"очеред\w*,?\s*",
+                r"инфраструктур\w*,?\s*",
+                r"латиниц\w*[^.?!]*",
             ):
                 rest = re.sub(pat, " ", rest)
             rest = re.sub(r"\s+", " ", rest).strip(" ,.?…")
-            if len(rest) < 12:
+            if len(rest) < 16:
                 return True
     if "библиотек" in low and "латиниц" in low and len(t) < 130:
         return True

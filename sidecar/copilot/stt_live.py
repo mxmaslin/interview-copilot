@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from .stt_filter import is_stt_hallucination
+from .stt_filter import is_stt_hallucination, strip_laughter_artifacts
 from .stt_glossary import apply_glossary_fixes
 
 # Короткие куски Whisper на шуме/тишине (не целая реплика).
@@ -28,6 +28,8 @@ _STRIP_FROM_LIVE: tuple[re.Pattern[str], ...] = tuple(
         r"Техническ\w*,?\s*интервью,?\s*русская\s+речь\.?",
         r"Технические\s+интервью,?\s*русская\s+речь\.?",
         r"Библиотеки,?\s+протоколы[^\n.?]{0,200}",
+        r"техническ\w*[^.?!]{0,120}интервью[^.?!]{0,120}русск\w*\s+реч[^.?!]{0,200}",
+        r"\bсмеш\w*\.?\b",
     )
 )
 
@@ -47,7 +49,7 @@ def is_stt_noise_chunk(text: str) -> bool:
 
 def sanitize_live_transcript(text: str) -> str:
     """Убрать типичный мусор из накопленной live-строки (терминал)."""
-    cleaned = (text or "").strip()
+    cleaned = strip_laughter_artifacts((text or "").strip())
     if not cleaned:
         return ""
     for pat in _STRIP_FROM_LIVE:

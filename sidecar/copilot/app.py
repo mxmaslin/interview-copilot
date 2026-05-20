@@ -96,6 +96,7 @@ from .transcript import (
     init_call_mic_muted_from_disk,
     pin_answer_speaker,
     pin_answer_target,
+    set_on_self_line_committed,
     reset_call_mic_muted,
     set_call_mic_muted_runtime,
 )
@@ -144,6 +145,9 @@ class CopilotApp(rumps.App):
         )
         self._telegram = TelegramInterviewerInput(
             on_message=self._on_transcript_interviewer
+        )
+        set_on_self_line_committed(
+            lambda: self._schedule_auto_answer(speaker="self")
         )
         self.menu = [
             rumps.MenuItem("Статус: ожидание", callback=None),
@@ -751,6 +755,17 @@ class CopilotApp(rumps.App):
         if answer_target:
             pin_answer_target(answer_target)
         question = answer_target[0] if answer_target else None
+        if question and is_stt_hallucination(question):
+            log("[copilot] ответ пропущен: STT-галлюцинация:", question[:80])
+            if interview_active():
+                sys.stdout.write(
+                    "\n[copilot] вопрос похож на мусор STT (эхо prompt / «Смешка») — "
+                    "ответ не запущен; дождись финала или ⌘G\n\n"
+                )
+                sys.stdout.flush()
+            if auto_pin:
+                pin_answer_speaker(None)
+            return
         if not question:
             if auto_pin:
                 pin_answer_speaker(None)
@@ -787,6 +802,11 @@ class CopilotApp(rumps.App):
         self._answer_generation = next_answer_generation()
         bind_answer_generation(self._answer_generation)
         self._answer_busy = True
+        if source == "auto" and interview_active():
+            sys.stdout.write(
+                f"\n[copilot] авто-ответ ({self._auto_answer_speaker or '?'})…\n"
+            )
+            sys.stdout.flush()
         if answer_pause_audio():
             self._pause_audio_for_sdk()
         provider = answer_provider()

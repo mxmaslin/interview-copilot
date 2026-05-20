@@ -309,10 +309,15 @@ def audio_preset() -> str:
 
 def stt_pending_flush_sec() -> float:
     """Через столько с после обрезка STT ([Я]) — дописать в transcript без новой речи."""
-    try:
-        return max(0.0, float(_env("STT_PENDING_FLUSH_SEC", "1.2")))
-    except ValueError:
-        return 1.2
+    explicit = _env("STT_PENDING_FLUSH_SEC")
+    if explicit:
+        try:
+            return max(0.0, float(explicit))
+        except ValueError:
+            pass
+    if stt_latency_preset() == "fast":
+        return 0.8
+    return 1.2
 
 
 def stt_fast_final_decode() -> bool:
@@ -353,7 +358,9 @@ def silence_seconds(*, speaker: str = "interviewer") -> float:
         if preset == "fast":
             return 0.58
         if preset == "interview":
-            return 0.62
+            if stt_latency_preset() == "fast":
+                return 0.48
+            return 0.58
         preset_latency = stt_latency_preset()
         if preset_latency == "quality":
             return 1.1
@@ -371,12 +378,16 @@ def silence_seconds(*, speaker: str = "interviewer") -> float:
         return 0.55
     if preset == "solo":
         return 0.42
+    if preset == "interview":
+        if stt_latency_preset() == "fast":
+            return 0.30
+        return 0.38
     latency = stt_latency_preset()
     if latency == "quality":
         return 1.0
     if latency == "balanced":
         return 0.45
-    return 0.38  # fast: короче пауза → раньше финальный сегмент
+    return 0.32  # fast: короче пауза → раньше финальный сегмент
 
 
 def min_speech_seconds() -> float:
@@ -427,6 +438,8 @@ def max_segment_seconds(*, speaker: str = "interviewer") -> float:
                 pass
         if preset == "balanced":
             return 2.0
+        if stt_latency_preset() == "fast":
+            return 1.5
         return 1.8
     if preset == "balanced":
         return 5.0
